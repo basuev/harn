@@ -678,6 +678,15 @@ void ui_command(char *line)
         const char *value = line + 7;
         while (*value == ' ')
             value++;
+        if (!app.busy && !app.models) {
+            app.busy = 1;
+            app.cancel = 0;
+            int loaded = models_list(0);
+            app.busy = 0;
+            app.cancel = 0;
+            if (!loaded)
+                return;
+        }
         if (!*value) {
             ui_print("Effort: %s", app.effort);
             const char *level;
@@ -686,6 +695,9 @@ void ui_command(char *line)
             ui_print("Supported levels depend on the model. default leaves effort to the provider.");
         } else if (app.busy)
             message("Interrupt the current turn before changing the effort");
+        else if (!effort_supported(value))
+            message("Unsupported effort for %s/%s: %s. Use /effort to list available levels.",
+                    app.connection->name, app.model, value);
         else if (effort_select(value))
             message("Effort: %s", app.effort);
         return;
@@ -710,6 +722,7 @@ void ui_command(char *line)
             if (*s) {
                 free(app.model);
                 app.model = xstrdup(s);
+                effort_activate();
                 app.usage_valid = 0;
                 context_budget(NULL, NULL);
                 json_t *model = json_string(s);

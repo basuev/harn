@@ -8,6 +8,13 @@ Shell commands, project files, and skill packages are the extension boundary.
 A plugin runtime, a model SDK, and a dependency on another coding client are
 outside that boundary.
 
+Public defaults and personal configuration have different ownership. Release
+builds use `config.def.h` even when the working tree has a personal `config.h`.
+This prevents a contributor's endpoints and model preferences from becoming
+public product defaults. The ignored local file survives builds and is never
+packaged. Fixture connections are isolated from both installed and release
+binaries.
+
 Adding an infrequent connection may require rebuilding. Switching among
 configured connections during a conversation must not require another binary
 or restart. The same tools, journal, and process accounting serve every
@@ -87,6 +94,13 @@ Endpoint settings come from the current build rather than stale journal URLs.
 A saved conversation does not provide credentials. A public model catalog also
 does not prove that an API key is valid.
 
+Streaming inference has no total wall-clock deadline. A real long-context,
+high-effort request received HTTP 200 but was cut off by the former five-minute
+curl deadline twice. Connection establishment and metadata/auth requests still
+have finite deadlines. Inference remains interruptible through the event loop.
+The journal records curl codes, diagnostic messages and stream status so HTTP
+success cannot mask an incomplete response.
+
 ## Instructions and skills
 
 Personal rules belong to harn's configuration directory. Shared skill packages
@@ -145,9 +159,18 @@ authoritative model removal.
 Effort is an explicit request setting, not a measure of how much thinking
 occurred. `default` omits the API field and is not the same as `none`. Historical
 sessions that omitted it must keep that behavior unless explicitly overridden.
-New sessions use the configured static baseline. Unsupported settings remain
-errors rather than silently falling back to another level. No automatic routing
-or speculative model capability registry is implied.
+New sessions default to provider-controlled effort. Available explicit values
+come from the selected model's `supported_reasoning_levels` catalog metadata,
+not a universal list. Without that metadata only `default` is exposed. New
+catalog levels need no client rebuild. Saved catalog capabilities remain usable
+during the same temporary outages as saved context metadata.
+
+Explicit choices belong to a provider/model pair within a session. Switching
+restores that pair's choice or uses `default`, rather than carrying an unrelated
+model's effort across endpoints. Historical string-valued effort events remain
+readable. Unsupported settings remain errors rather than silently falling back
+to another level. No automatic routing or speculative model capability registry
+is implied.
 
 Earlier requests omitted effort. The [Sol model documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
 and [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)

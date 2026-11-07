@@ -48,7 +48,7 @@ int main(void) {
         cls.binary = str(Path(cls.tmp.name) / "render")
         libs = subprocess.check_output(["pkg-config", "--cflags", "--libs", "libcurl", "jansson", "md4c"], text=True)
         subprocess.run([*shlex.split(os.environ.get("CC", "cc")), "-std=c11", "-D_XOPEN_SOURCE=700",
-                        "-I" + str(ROOT), str(bridge), str(ROOT / "render.c"), str(ROOT / "util.c"),
+                        '-DHARN_CONFIG="config.def.h"', "-I" + str(ROOT), str(bridge), str(ROOT / "render.c"), str(ROOT / "util.c"),
                         *shlex.split(libs), "-o", cls.binary], check=True)
 
     @classmethod

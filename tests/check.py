@@ -16,7 +16,7 @@ import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = ROOT / "harn"
+BINARY = ROOT / ".build/harn-test"
 
 
 def call(name, arguments, ident):
@@ -110,6 +110,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                          context_window=self.server.key_window if is_key and self.server.key_window else self.server.window)
             if self.server.window is None:
                 del model["context_window"]
+            model["supported_reasoning_levels"] = [dict(effort=level) for level in
+                ("none", "minimal", "low", "medium", "high", "xhigh", "max")]
             model.update(self.server.model_metadata)
             if self.server.standard_catalog or is_key:
                 model = dict(id=model.pop("slug"), **model)
@@ -615,7 +617,7 @@ class Checks(unittest.TestCase):
             p.send("/context")
             p.wait("fallback 200000, compact 160000")
             info = [r["data"] for r in self.records() if r["type"] == "model_info"][-1]
-            self.assertEqual(info["catalog"], {})
+            self.assertNotIn("context_window", info["catalog"])
             self.assertEqual(info["limit_source"], "config.h fallback")
         finally:
             p.finish()
@@ -1449,6 +1451,63 @@ class Checks(unittest.TestCase):
         self.assertNotIn("~", view)
         self.assertTrue(any(r["type"] == "usage" and r["data"] == 136000 for r in self.records()))
 
+    def test_catalog_without_effort_metadata_only_allows_default(self):
+        self.server.mode = "echo"
+        self.server.model_metadata = dict(supported_reasoning_levels=None)
+        self.run_batch("DEFAULT ONLY", "--effort", "default")
+        self.assertNotIn("reasoning", self.server.requests[-1])
+        result = self.run_batch("UNSUPPORTED", "--effort", "high", expected=1)
+        self.assertIn(b"Unsupported effort", result.stderr)
+        self.assertEqual(len(self.server.requests), 1)
+
+    def test_effort_choices_and_preferences_follow_model_and_resume(self):
+        self.server.mode = "echo"
+        self.server.extra_models = [dict(slug="default-only", visibility="list"),
+            dict(slug="future-model", visibility="list",
+                 supported_reasoning_levels=[dict(effort="ultra")])]
+        p = Process(self)
+        try:
+            p.send("FIRST")
+            p.wait("OK FIRST")
+            p.send("/effort high")
+            p.wait("Effort: high")
+            p.send("/model default-only")
+            p.wait("Model: default-only")
+            p.buffer = b""
+            p.send("/effort high")
+            p.wait("Unsupported effort")
+            p.send("/effort default")
+            p.wait("Effort: default")
+            p.send("/model future-model")
+            p.wait("Model: future-model")
+            p.send("/effort ultra")
+            p.wait("Effort: ultra")
+            p.send("FUTURE")
+            p.wait("OK FUTURE")
+            self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="ultra"))
+            p.send("/model gpt-6.1-sol")
+            p.wait("Model: gpt-6.1-sol")
+            p.send("RESTORED")
+            p.wait("OK RESTORED")
+            self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
+        finally:
+            p.finish()
+        self.run_batch("RESUME FUTURE", "--resume", "-m", "future-model")
+        self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="ultra"))
+        self.run_batch("RESUME SELECTED MODEL", "--resume")
+        self.assertEqual(self.server.requests[-1]["model"], "future-model")
+        self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="ultra"))
+
+    def test_request_error_records_transport_and_stream_details(self):
+        self.server.response_status = 400
+        self.run_batch("FAIL", expected=1)
+        error = [r["data"] for r in self.records() if r["type"] == "request_error"][-1]
+        self.assertEqual(error["http_status"], 400)
+        self.assertEqual(error["curl_code"], 0)
+        self.assertIsInstance(error["message"], str)
+        self.assertFalse(error["invalid_stream"])
+        self.assertIn("response_status", error)
+
     def test_effort_default_and_cli_are_sent_and_reported_separately(self):
         self.server.mode = "echo"
         self.server.response_reasoning = dict(effort="high")
@@ -1473,7 +1532,7 @@ class Checks(unittest.TestCase):
             self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
             p.buffer = b""
             p.send("/effort invented")
-            p.wait("Unknown effort")
+            p.wait("Unsupported effort")
             p.send("/effort")
             p.wait("Supported levels depend on the model")
             self.assertIn(b"Effort: high", p.buffer)
@@ -1497,6 +1556,9 @@ class Checks(unittest.TestCase):
         meta = json.loads(path.read_text())
         meta.pop("effort")
         path.write_text(json.dumps(meta))
+        journal = self.session() / "journal.jsonl"
+        journal.write_text("".join(json.dumps(r) + "\n" for r in self.records()
+                                   if r["type"] != "effort"))
         self.run_batch("LEGACY RESUME", "--resume")
         self.assertNotIn("reasoning", self.server.requests[-1])
         self.run_batch("EXPLICIT RESUME", "--resume", "--effort", "low")
@@ -1510,10 +1572,10 @@ class Checks(unittest.TestCase):
         self.assertEqual(self.server.requests[0]["reasoning"], dict(effort="max"))
 
     def test_invalid_cli_effort_fails_without_requests(self):
-        result = self.run_batch("DO NOT RUN", "--effort", "invented", expected=2)
-        self.assertIn(b"Unknown effort", result.stderr)
+        result = self.run_batch("DO NOT RUN", "--effort", "invented", expected=1)
+        self.assertIn(b"Unsupported effort", result.stderr)
         self.assertEqual(self.server.requests, [])
-        self.assertEqual(self.server.model_fetches, 0)
+        self.assertEqual(self.server.model_fetches, 1)
 
     def test_effort_change_during_inference_is_rejected_without_changing_request(self):
         self.server.mode = "slow"

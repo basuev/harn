@@ -83,7 +83,7 @@ class ResponsesChecks(unittest.TestCase):
         self.env.pop("HARN_API_BASE")
         self.env.pop("ALLMODELS_API_KEY")
         result = self.run_batch("NO OVERRIDE", expected=1)
-        self.assertIn(b"Set ALLMODELS_API_KEY to the API key for https://api.allmodels.io/oai", result.stderr)
+        self.assertIn(b"Set ALLMODELS_API_KEY to the API key for http://fixture.invalid/v1", result.stderr)
         self.assertEqual(self.server.model_fetches, 0)
 
     def test_model_list_uses_ids(self):
@@ -186,6 +186,32 @@ class SwitchingChecks(unittest.TestCase):
         self.server.key_window = 262144
         self.env["ALLMODELS_API_KEY"] = "KEY_NEVER_SAVED"
         self.env["HARN_AUTH_ISSUER"] = "http://127.0.0.1:" + str(self.server.server_port)
+
+    def test_effort_is_scoped_to_provider_and_persists_on_resume(self):
+        p = check.Process(self, "--effort", "high")
+        try:
+            p.send("CHATGPT")
+            p.wait("OK CHATGPT")
+            self.server.model_metadata = dict(supported_reasoning_levels=None)
+            p.send("/provider allmodels")
+            p.wait("Model: " + MODEL)
+            p.send("KEY DEFAULT")
+            p.wait("OK KEY DEFAULT")
+            self.assertNotIn("reasoning", self.server.requests[-1])
+            p.send("/effort high")
+            p.wait("Unsupported effort")
+            self.server.model_metadata = {}
+            p.send("/provider chatgpt")
+            p.wait("Provider: chatgpt")
+            p.send("CHATGPT RESTORED")
+            p.wait("OK CHATGPT RESTORED")
+            self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
+        finally:
+            p.finish()
+        self.run_batch("RESUMED KEY", "--resume", "--provider", "allmodels")
+        self.assertNotIn("reasoning", self.server.requests[-1])
+        self.run_batch("RESUMED CHATGPT", "--resume", "--provider", "chatgpt")
+        self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
 
     def test_one_process_switches_both_authorization_modes_and_resumes_last_selection(self):
         p = check.Process(self)

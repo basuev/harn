@@ -110,14 +110,31 @@ class Presentation(unittest.TestCase):
         def has_model_prompt():
             plain = re.sub(rb"\x1b\[[0-9;]*[A-Za-z]", b"", self.output[mark:])
             plain = plain.replace(b"\r", b"").replace(b"\n", b"")
-            return (name + " mediumctx:").encode() in plain
+            return (name + " defaultctx:").encode() in plain
         self.read_until(has_model_prompt)
         self.assertEqual(self.case.server.requests, [])
         self.assertEqual(self.case.server.model_fetches, 0)
         self.assertNotRegex(self.output, rb"\x1b\[-[0-9]+A")
 
+    def load_catalog(self):
+        mark = len(self.output)
+        self.send("/model\r")
+        self.read_until(lambda: b"  gpt-6.1-sol" in self.output[mark:])
+
+    def test_effort_completion_only_offers_the_selected_models_catalog_levels(self):
+        self.case.server.model_metadata = dict(supported_reasoning_levels=None)
+        self.start(width=42)
+        self.load_catalog()
+        mark = len(self.output)
+        self.send("/effort ")
+        self.read_until(lambda: b"\x1b[7mdefault" in self.output[mark:])
+        self.assertNotIn(b"xhigh", self.output[mark:])
+        self.assertNotIn(b"\r\n  medium", self.output[mark:])
+        self.assertEqual(self.case.server.requests, [])
+
     def test_effort_completion_sets_value_and_updates_persistent_prompt(self):
         self.start(width=42)
+        self.load_catalog()
         self.send("/effort x")
         self.read_until(lambda: b"\x1b[7mxhigh" in self.output)
         mark = len(self.output)
@@ -125,7 +142,7 @@ class Presentation(unittest.TestCase):
         self.read_until(lambda: b"gpt-6.1-sol xhigh" in self.output[mark:])
         self.assertNotIn(b"effort:", self.output[mark:])
         self.assertEqual(self.case.server.requests, [])
-        self.assertEqual(self.case.server.model_fetches, 0)
+        self.assertEqual(self.case.server.model_fetches, 1)
 
     def test_automatic_command_suggestions_are_local_and_tab_accepts(self):
         self.start()
@@ -184,12 +201,13 @@ class Presentation(unittest.TestCase):
 
     def test_enter_chains_effort_command_then_executes_selected_argument(self):
         self.start(width=42)
+        self.load_catalog()
         self.send("/ef\r")
         self.read_until(lambda: b"> /effort " in self.output and b"\x1b[7mdefault" in self.output)
         self.assertEqual(self.case.server.requests, [])
         self.send("hi\r")
         self.read_until(lambda: b"gpt-6.1-sol high" in self.output)
-        self.assertEqual(self.case.server.model_fetches, 0)
+        self.assertEqual(self.case.server.model_fetches, 1)
         self.assertEqual(self.case.server.requests, [])
 
     def test_enter_chains_job_subcommand_without_duplicate_spaces(self):
@@ -285,6 +303,7 @@ class Presentation(unittest.TestCase):
 
     def test_ctrl_n_and_ctrl_p_keep_history_navigation_without_suggestions(self):
         self.start()
+        self.load_catalog()
         self.send("/help\r")
         self.read_until(lambda: b"Ctrl-Z: suspend" in self.output)
         mark = len(self.output)
@@ -337,6 +356,7 @@ class Presentation(unittest.TestCase):
 
     def test_suggestion_range_disappears_when_filtered_list_fits_or_is_dismissed(self):
         self.start(width=42)
+        self.load_catalog()
         self.send("/effort ")
         self.read_until(lambda: b"1-5 of 8" in self.output)
         mark = len(self.output)

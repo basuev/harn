@@ -132,6 +132,8 @@ int compact_context(void)
         message("Recent context is already retained");
         return 0;
     }
+    if (!app.models && !models_list(0))
+        return 0;
     message("Compacting context");
     json_t *input = context_build(app.cut, cut, app.summary, (size_t)-1);
     json_array_append_new(
@@ -359,8 +361,7 @@ int main(int argc, char **argv)
         fputs("Invalid context settings\n", stderr);
         return 2;
     }
-    if (!effort_select(app.effort_override ? app.effort_override : DEFAULT_EFFORT))
-        return 2;
+    app.effort = xstrdup(app.effort_override ? app.effort_override : DEFAULT_EFFORT);
     app.root = getcwd(NULL, 0);
     if (!app.root) {
         perror("getcwd");

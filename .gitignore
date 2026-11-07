@@ -1,5 +1,6 @@
 /.build/
 /harn
+/config.h
 /dist/
 /.local/
 __pycache__/

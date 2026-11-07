@@ -651,6 +651,8 @@ static json_t *model_catalog(json_t *catalog)
         json_t *model = json_pack("{s:s,s:s}", "slug", id, "visibility", "list");
         if (json_is_integer(window))
             json_object_set(model, "context_window", window);
+        json_object_set(model, "supported_reasoning_levels",
+                        json_object_get(entry, "supported_reasoning_levels"));
         json_array_append_new(models, model);
     }
     return models;

@@ -41,9 +41,21 @@ harn --resume
 
 ## Configuration
 
-Edit `config.h` for connections and defaults, then rebuild. API keys belong in
-the environment variables named there, not in the source. The bundled AllModels
-connection uses `ALLMODELS_API_KEY` and can be selected with `--provider allmodels`.
+The first build copies `config.def.h` to your untracked `config.h`. Edit the local
+file for connections and defaults, then rebuild. API keys belong in the named
+environment variables, never in the source. Only ChatGPT sign-in is configured
+in the public defaults. To add a Responses endpoint, add a connection with its
+base URL, key environment variable and model ID to the local connection array.
+
+`make release` always builds from `config.def.h`, independently of personal
+settings. Release sources do not contain your local `config.h`.
+
+`/effort` loads the selected provider's model catalog and lists its advertised
+reasoning levels. Without capability metadata only `default` is offered, which
+omits `reasoning.effort`. Explicit choices are remembered per provider and model
+within the session, including on resume. Switching to a model without a saved
+choice uses `default`. Unsupported explicit choices fail without an inference
+request or a silent fallback.
 
 - Personal instructions: `~/.config/harn/AGENTS.md`.
 - Directory instructions: `AGENTS.md` in the project, its parents, and visited subdirectories.

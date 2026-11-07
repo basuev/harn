@@ -141,28 +141,79 @@ void user_add(const char *text)
 }
 const char *effort_at(size_t index)
 {
-    static const char *values[] = {"default", "none", "minimal", "low", "medium", "high", "xhigh", "max"};
-    return index < sizeof(values) / sizeof(values[0]) ? values[index] : NULL;
+    if (index == 0)
+        return "default";
+    json_t *model;
+    size_t i;
+    json_array_foreach(app.models, i, model) {
+        const char *slug = jstr(model, "slug");
+        if (slug && app.model && !strcmp(slug, app.model)) {
+            json_t *level = json_array_get(json_object_get(model, "supported_reasoning_levels"),
+                                           index - 1);
+            return json_is_string(level) ? json_string_value(level) : jstr(level, "effort");
+        }
+    }
+    const char *saved_model = jstr(app.model_info, "model");
+    if (saved_model && app.model && !strcmp(saved_model, app.model)) {
+        json_t *level = json_array_get(json_object_get(json_object_get(app.model_info, "catalog"),
+                                                     "supported_reasoning_levels"), index - 1);
+        return json_is_string(level) ? json_string_value(level) : jstr(level, "effort");
+    }
+    return NULL;
+}
+int effort_supported(const char *value)
+{
+    const char *level;
+    for (size_t i = 0; (level = effort_at(i)); i++)
+        if (!strcmp(level, value))
+            return 1;
+    return 0;
+}
+static char *effort_key(void)
+{
+    return fmt("%s\n%s", app.connection->name, app.model);
+}
+void effort_activate(void)
+{
+    char *key = effort_key();
+    const char *saved = jstr(app.efforts, key);
+    free(app.effort);
+    app.effort = xstrdup(saved ? saved : "default");
+    app.usage_valid = 0;
+    free(key);
+    json_t *selection = json_pack("{s:s,s:s,s:s}", "provider", app.connection->name,
+                                 "model", app.model, "value", app.effort);
+    journal("effort", selection);
+    json_decref(selection);
 }
 int effort_select(const char *value)
 {
-    const char *known;
-    for (size_t i = 0; (known = effort_at(i)); i++) {
-        if (strcmp(value, known))
-            continue;
-        if (app.effort && !strcmp(app.effort, value))
-            return 1;
-        free(app.effort);
-        app.effort = xstrdup(value);
-        json_t *selection = json_string(value);
-        journal("effort", selection);
-        json_decref(selection);
-        app.usage_valid = 0;
-        ui_status();
-        return 1;
+    if (app.models && !effort_supported(value)) {
+        message("Unsupported effort for %s/%s: %s. Use /effort to list available levels.",
+                app.connection->name, app.model, value);
+        return 0;
     }
-    message("Unknown effort: %s. Use default, none, minimal, low, medium, high, xhigh or max.", value);
-    return 0;
+    int changed = !app.effort || strcmp(app.effort, value);
+    char *next = xstrdup(value);
+    free(app.effort);
+    app.effort = next;
+    json_t *selection = json_string(app.effort);
+    if (app.connection && app.model) {
+        if (!app.efforts)
+            app.efforts = json_object();
+        char *key = effort_key();
+        json_object_set(app.efforts, key, selection);
+        free(key);
+        json_decref(selection);
+        selection = json_pack("{s:s,s:s,s:s}", "provider", app.connection->name,
+                              "model", app.model, "value", app.effort);
+    }
+    journal("effort", selection);
+    json_decref(selection);
+    if (changed)
+        app.usage_valid = 0;
+    ui_status();
+    return 1;
 }
 static void usage_restore(json_t *data)
 {
@@ -337,6 +388,15 @@ int session_open(const char *resume)
         } else if (type && !strcmp(type, "effort") && json_is_string(data)) {
             free(app.effort);
             app.effort = xstrdup(json_string_value(data));
+        } else if (type && !strcmp(type, "effort") && jstr(data, "value") &&
+                   jstr(data, "provider") && jstr(data, "model")) {
+            if (!app.efforts)
+                app.efforts = json_object();
+            char *key = fmt("%s\n%s", jstr(data, "provider"), jstr(data, "model"));
+            json_object_set(app.efforts, key, json_object_get(data, "value"));
+            free(key);
+            free(app.effort);
+            app.effort = xstrdup(jstr(data, "value"));
         } else if (type && !strcmp(type, "model_info")) {
             json_decref(app.model_info);
             app.model_info = json_incref(data);
@@ -394,8 +454,6 @@ int session_open(const char *resume)
         if (!restored)
             return -1;
     }
-    if (!effort_select(app.effort_override ? app.effort_override : app.effort))
-        return -1;
     if (resume)
         session_recover();
     int changed = app.connection_override &&
@@ -405,7 +463,16 @@ int session_open(const char *resume)
     if (model_option) {
         free(app.model);
         app.model = model_option;
+        if (resume) {
+            json_t *selection = json_string(app.model);
+            journal("model", selection);
+            json_decref(selection);
+        }
     }
+    if (changed || (resume && model_option))
+        effort_activate();
+    if (!effort_select(app.effort_override ? app.effort_override : app.effort))
+        return -1;
     if (changed) {
         json_t *selection = json_pack("{s:s,s:s}", "provider", app.connection->name, "model",
                                       app.model);
@@ -568,7 +635,8 @@ void context_budget(json_t *model, const char *source)
     long recommended = jint(model, "auto_compact_token_limit", 0);
     json_t *catalog = json_is_object(model) ? json_object() : json_null();
     const char *fields[] = {"context_window", "effective_context_window_percent",
-                            "auto_compact_token_limit"};
+                            "auto_compact_token_limit", "supported_reasoning_levels",
+                            "default_reasoning_level"};
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
         json_t *value = json_object_get(model, fields[i]);
         if (value)

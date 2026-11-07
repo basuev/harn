@@ -1,16 +1,14 @@
 #define VERSION "0.1.0"
 #define DEFAULT_PROVIDER "chatgpt"
-#define DEFAULT_EFFORT "medium" /* "default" leaves reasoning.effort to the endpoint. */
+#define DEFAULT_EFFORT "default" /* Use the selected model's provider default. */
 #ifdef CONFIG_CONNECTIONS
 /* name, Responses API base, key environment variable, default model.
- * An empty key variable selects ChatGPT sign-in. Never put a key value here. */
+ * Add personal connections to config.h. Never put key values here. */
 static const Connection connections[] = {
     {"chatgpt", "https://api.openai.com/v1", "", "gpt-6.1-sol"},
-    {"allmodels", "https://api.allmodels.io/oai", "ALLMODELS_API_KEY",
-     "deepseek/deepseek-v4.1-flash-abliterated"},
 };
 #endif
-#define CONTEXT_LIMIT 0 /* 0 uses the model catalog, otherwise caps its window. */
+#define CONTEXT_LIMIT 0
 #define CONTEXT_FALLBACK 200000
 #define COMPACT_PERCENT 80
 #define COMPACT_TAIL 2

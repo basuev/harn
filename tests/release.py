@@ -28,9 +28,12 @@ def main():
         for path in source.rglob("*"):
             assert not forbidden.intersection(path.relative_to(source).parts), path
         assert not (source / "harn").exists()
+        assert not (source / "config.h").exists()
+        assert b"api.allmodels.io" not in (release / "bin/harn").read_bytes()
+        assert b"ALLMODELS_API_KEY" not in (release / "bin/harn").read_bytes()
         for name in ("README.md", "DESIGN.md", "LICENSE"):
             assert (release / name).read_bytes() == (source / name).read_bytes()
-        for name in (".gitignore", ".clang-format", "Makefile", "config.h", "harn.h"):
+        for name in (".gitignore", ".clang-format", "Makefile", "config.def.h", "harn.h"):
             assert (source / name).is_file(), name
         for library in ("libjwt", "linenoise"):
             assert (release / "licenses" / ("LICENSE." + library)).read_bytes() == (

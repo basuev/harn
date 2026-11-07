@@ -4,7 +4,10 @@
 typedef struct {
     const char *name, *api_base, *key_env, *model;
 } Connection;
-#include "config.h"
+#ifndef HARN_CONFIG
+#define HARN_CONFIG "config.h"
+#endif
+#include HARN_CONFIG
 #include "vendor/linenoise/linenoise.h"
 #include <curl/curl.h>
 #include <jansson.h>
@@ -42,7 +45,7 @@ typedef struct {
     const char *effort_override;
     const Connection *connection;
     char *api_base, *issuer, *instructions;
-    json_t *connection_models;
+    json_t *connection_models, *efforts;
     size_t connection_start;
     json_t *items, *requests, *cycles, *credentials, *registration, *discovery, *past_jobs;
     json_t *last_usage, *models, *model_info;
@@ -118,6 +121,8 @@ void sessions_list(void);
 void session_show(int);
 const char *effort_at(size_t);
 int effort_select(const char *);
+void effort_activate(void);
+int effort_supported(const char *);
 void session_recover(void);
 
 Job *job_start(const char *, int);

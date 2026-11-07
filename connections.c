@@ -113,6 +113,7 @@ void connection_command(const char *name)
         return;
     if (!connection_select(name))
         return;
+    effort_activate();
     json_t *selection = json_pack("{s:s,s:s}", "provider", app.connection->name, "model", app.model);
     journal("provider", selection);
     json_decref(selection);

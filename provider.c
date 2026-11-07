@@ -138,7 +138,9 @@ static void net_run(Net *n, const char *url, const char *body, const char *conte
     curl_easy_setopt(n->easy, CURLOPT_WRITEDATA, n);
     curl_easy_setopt(n->easy, CURLOPT_ERRORBUFFER, n->error);
     curl_easy_setopt(n->easy, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
-    curl_easy_setopt(n->easy, CURLOPT_TIMEOUT_MS, 300000L);
+    /* Streaming inference may legitimately take longer than five minutes.
+     * Keep finite deadlines for metadata/auth, while inference stays cancellable. */
+    curl_easy_setopt(n->easy, CURLOPT_TIMEOUT_MS, n->stream ? 0L : 300000L);
     curl_easy_setopt(n->easy, CURLOPT_NOSIGNAL, 1L);
     const char *ca = getenv("HARN_CA_FILE");
     if (ca)
@@ -229,6 +231,11 @@ static const char *api_error(json_t *o)
 }
 json_t *model_request(json_t *payload)
 {
+    if (!effort_supported(app.effort)) {
+        message("Unsupported effort for %s/%s: %s. Use /effort to select a supported level.",
+                app.connection->name, app.model, app.effort);
+        return NULL;
+    }
     app.context_exceeded = 0;
     ui_activity("%s", app.compacting ? "compact" : "model");
     if (!auth_ready(0))
@@ -298,6 +305,11 @@ json_t *model_request(json_t *payload)
                 n.malformed ? " (invalid stream)" : "");
         json_t *event = json_pack("{s:i,s:i,s:s}", "attempt", attempt, "http_status", (int)n.status,
                                   "code", code ? code : "transport_or_stream");
+        json_object_set_new(event, "curl_code", json_integer(n.result));
+        json_object_set_new(event, "message", json_string(
+            n.result ? (n.error[0] ? n.error : curl_easy_strerror(n.result)) : api_error(failure)));
+        json_object_set_new(event, "invalid_stream", json_boolean(n.malformed));
+        json_object_set_new(event, "response_status", status ? json_string(status) : json_null());
         journal("request_error", event);
         json_decref(event);
         json_decref(failure);
