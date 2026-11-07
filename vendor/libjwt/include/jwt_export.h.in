@@ -1,0 +1,72 @@
+/* Copyright (C) 2024-2025 maClara, LLC <info@maclara-llc.com>
+   This file is part of the JWT C Library
+
+   SPDX-License-Identifier:  MPL-2.0
+   This Source Code Form is subject to the terms of the Mozilla Public
+   License, v. 2.0. If a copy of the MPL was not distributed with this
+   file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifndef @INCLUDE_GUARD_NAME@
+#define @INCLUDE_GUARD_NAME@
+
+/* Version macros for LibJWT */
+#define @VERSION_MAJOR_NAME@	@DEFINE_MAJOR@
+#define @VERSION_MINOR_NAME@	@DEFINE_MINOR@
+#define @VERSION_MICRO_NAME@	@DEFINE_MICRO@
+
+#define @VERSION_STRING_NAME@	@DEFINE_VERSION@
+
+/* Whether the system supports "long long". This is primarily to sync
+ * with jansson's json_int_t when working with JSON integers. */
+#define @USE_LONG_LONG_NAME@	@DEFINE_LONG_LONG@
+
+/* Whether this build includes experimental ML-DSA (FIPS 204 / RFC 9964)
+ * support. Defined only when built with -DWITH_ML_DSA=ON against a crypto
+ * backend that implements ML-DSA (OpenSSL >= 3.5, or GnuTLS >= 3.8.10 built
+ * against a PQC provider). Downstream code can test this to know whether the
+ * JWT_ALG_ML_DSA_* algorithms are usable. */
+#cmakedefine LIBJWT_HAVE_ML_DSA 1
+
+#ifdef @STATIC_DEFINE@
+#  define @EXPORT_MACRO_NAME@
+#  define @NO_EXPORT_MACRO_NAME@
+#else
+#  ifndef @EXPORT_MACRO_NAME@
+#    ifdef @EXPORT_IMPORT_CONDITION@
+        /* We are building this library */
+#      define @EXPORT_MACRO_NAME@ @DEFINE_EXPORT@
+#    else
+        /* We are using this library */
+#      define @EXPORT_MACRO_NAME@ @DEFINE_IMPORT@
+#    endif
+#  endif
+
+#  ifndef @NO_EXPORT_MACRO_NAME@
+#    define @NO_EXPORT_MACRO_NAME@ @DEFINE_NO_EXPORT@
+#  endif
+#endif
+
+#ifndef @CONSTRUCTOR_MACRO_NAME@
+#  define @CONSTRUCTOR_MACRO_NAME@ @DEFINE_CONSTRUCTOR@
+#endif
+
+#ifndef @DEPRECATED_MACRO_NAME@
+#  define @DEPRECATED_MACRO_NAME@ @DEFINE_DEPRECATED@
+#endif
+
+#ifndef @DEPRECATED_MACRO_NAME@_EXPORT
+#  define @DEPRECATED_MACRO_NAME@_EXPORT @EXPORT_MACRO_NAME@ @DEPRECATED_MACRO_NAME@
+#endif
+
+#ifndef @DEPRECATED_MACRO_NAME@_NO_EXPORT
+#  define @DEPRECATED_MACRO_NAME@_NO_EXPORT @NO_EXPORT_MACRO_NAME@ @DEPRECATED_MACRO_NAME@
+#endif
+
+/* NOLINTNEXTLINE(readability-avoid-unconditional-preprocessor-if) */
+#if @DEFINE_NO_DEPRECATED@ /* DEFINE_NO_DEPRECATED */
+#  ifndef @NO_DEPRECATED_MACRO_NAME@
+#    define @NO_DEPRECATED_MACRO_NAME@
+#  endif
+#endif
+
+#endif /* @INCLUDE_GUARD_NAME@ */
