@@ -75,6 +75,82 @@ void sessions_list(void)
     free(base);
 }
 
+static int session_recent(const void *a, const void *b)
+{
+    json_t *left = *(json_t *const *)a, *right = *(json_t *const *)b;
+    long l = jint(left, "updated", 0), r = jint(right, "updated", 0);
+    if (l == r) {
+        l = jint(left, "updated_ns", 0);
+        r = jint(right, "updated_ns", 0);
+    }
+    return l < r ? 1 : l > r ? -1 : strcmp(jstr(right, "id"), jstr(left, "id"));
+}
+json_t *sessions_catalog(void)
+{
+    json_t *result = json_array();
+    char *base = sessions_path();
+    DIR *dir = opendir(base);
+    struct dirent *entry;
+    while (dir && (entry = readdir(dir))) {
+        if (entry->d_name[0] == '.' ||
+            (app.session_id && !strcmp(entry->d_name, app.session_id)))
+            continue;
+        char *path = fmt("%s/%s/meta.json", base, entry->d_name);
+        json_t *meta = load_json(path);
+        free(path);
+        const char *root = jstr(meta, "cwd");
+        path = fmt("%s/%s/journal.jsonl", base, entry->d_name);
+        struct stat st;
+        if (root && !strcmp(root, app.root) && !stat(path, &st)) {
+            char *line = NULL, *excerpt = NULL;
+            size_t cap = 0;
+            FILE *file = fopen(path, "r");
+            while (file && getline(&line, &cap, file) > 0) {
+                json_t *event = json_loads(line, 0, NULL);
+                json_t *data = json_object_get(event, "data");
+                const char *type = jstr(event, "type"), *role = jstr(data, "role");
+                const char *text = jstr(data, "content");
+                if (type && !strcmp(type, "item") && role && !strcmp(role, "user") && text && *text) {
+                    size_t len = strcspn(text, "\r\n");
+                    if (len > 120) {
+                        len = 120;
+                        while (len && ((unsigned char)text[len] & 0xc0) == 0x80)
+                            len--;
+                    }
+                    excerpt = fmt("%.*s", (int)len, text);
+                }
+                json_decref(event);
+                if (excerpt)
+                    break;
+            }
+            if (file)
+                fclose(file);
+            free(line);
+            json_array_append_new(result, json_pack("{s:s,s:I,s:I,s:s}", "id", entry->d_name,
+                                  "updated", (json_int_t)st.st_mtime,
+                                  "updated_ns", (json_int_t)st.st_mtim.tv_nsec, "description",
+                                  excerpt ? excerpt : "No saved user messages"));
+            free(excerpt);
+        }
+        free(path);
+        json_decref(meta);
+    }
+    if (dir)
+        closedir(dir);
+    free(base);
+    size_t count = json_array_size(result);
+    json_t **sorted = xmalloc((count + 1) * sizeof(*sorted));
+    for (size_t i = 0; i < count; i++)
+        sorted[i] = json_array_get(result, i);
+    qsort(sorted, count, sizeof(*sorted), session_recent);
+    json_t *catalog = json_array();
+    for (size_t i = 0; i < count; i++)
+        json_array_append(catalog, sorted[i]);
+    free(sorted);
+    json_decref(result);
+    return catalog;
+}
+
 static void session_excerpt(const char *label, const char *text)
 {
     size_t len = strcspn(text, "\r\n");
@@ -710,6 +786,126 @@ void request_record(json_t *request)
     if (save_json(path, request))
         message("Could not save request view");
     free(path);
+}
+/* Exchange only conversation ownership. Terminal and transport state stay live. */
+static void session_exchange(App *other)
+{
+#define EXCHANGE(field)                                      \
+    do {                                                     \
+        unsigned char value[sizeof(app.field)];               \
+        memcpy(value, &app.field, sizeof(value));              \
+        memcpy(&app.field, &other->field, sizeof(value));      \
+        memcpy(&other->field, value, sizeof(value));           \
+    } while (0)
+    EXCHANGE(session_id);
+    EXCHANGE(session_dir);
+    EXCHANGE(journal);
+    EXCHANGE(model);
+    EXCHANGE(effort);
+    EXCHANGE(connection);
+    EXCHANGE(api_base);
+    EXCHANGE(connection_models);
+    EXCHANGE(efforts);
+    EXCHANGE(credentials);
+    EXCHANGE(registration);
+    EXCHANGE(discovery);
+    EXCHANGE(models);
+    EXCHANGE(model_info);
+    EXCHANGE(items);
+    EXCHANGE(requests);
+    EXCHANGE(cycles);
+    EXCHANGE(past_jobs);
+    EXCHANGE(active_skills);
+    EXCHANGE(skills);
+    EXCHANGE(instruction_dirs);
+    EXCHANGE(instruction_sources);
+    EXCHANGE(delivered_instructions);
+    EXCHANGE(instructions);
+    EXCHANGE(last_usage);
+    EXCHANGE(summary);
+    EXCHANGE(cut);
+    EXCHANGE(connection_start);
+    EXCHANGE(next_job);
+    EXCHANGE(jobs);
+    EXCHANGE(context_limit);
+    EXCHANGE(compact_limit);
+    EXCHANGE(limit_source);
+    EXCHANGE(compact_source);
+    EXCHANGE(context_known);
+    EXCHANGE(usage_valid);
+    EXCHANGE(context_exceeded);
+#undef EXCHANGE
+}
+static void session_dispose(void)
+{
+    session_close();
+    free(app.session_id);
+    free(app.session_dir);
+    free(app.model);
+    free(app.effort);
+    free(app.api_base);
+    free(app.instructions);
+    free(app.summary);
+    json_decref(app.connection_models);
+    json_decref(app.efforts);
+    json_decref(app.credentials);
+    json_decref(app.registration);
+    json_decref(app.discovery);
+    json_decref(app.models);
+    json_decref(app.model_info);
+    json_decref(app.items);
+    json_decref(app.requests);
+    json_decref(app.cycles);
+    json_decref(app.past_jobs);
+    json_decref(app.active_skills);
+    json_decref(app.skills);
+    json_decref(app.instruction_dirs);
+    json_decref(app.instruction_sources);
+    json_decref(app.delivered_instructions);
+    json_decref(app.last_usage);
+}
+int session_switch(const char *id)
+{
+    if (app.session_id && !strcmp(id, app.session_id)) {
+        message("Session is already active");
+        return 0;
+    }
+    App previous = {0};
+    session_exchange(&previous);
+    app.connection = previous.connection;
+    app.model = xstrdup(previous.model);
+    app.effort = xstrdup("default");
+    app.api_base = xstrdup(previous.api_base);
+    app.credentials = json_incref(previous.credentials);
+    app.registration = json_incref(previous.registration);
+    app.discovery = json_incref(previous.discovery);
+    const char *provider_override = app.connection_override, *effort_override = app.effort_override;
+    int model_override = app.model_override;
+    app.connection_override = app.effort_override = NULL;
+    app.model_override = 0;
+    context_budget(NULL, NULL);
+    int ok = !session_open(id);
+    app.connection_override = provider_override;
+    app.effort_override = effort_override;
+    app.model_override = model_override;
+    if (!ok) {
+        session_dispose();
+        session_exchange(&previous);
+        ui_status();
+        return 0;
+    }
+    session_exchange(&previous);
+    jobs_shutdown();
+    session_dispose();
+    session_exchange(&previous);
+    app.compact_requested = 0;
+    app.exit_status = 0;
+    session_show(1);
+    message("Provider: %s", app.connection->name);
+    message("Model: %s", app.model);
+    message("Effort: %s", app.effort);
+    ui_status();
+    return 1;
 }
 void session_close(void)
 {

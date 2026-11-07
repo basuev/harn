@@ -1611,6 +1611,82 @@ class Checks(unittest.TestCase):
         self.assertTrue(all(r["reasoning"] == dict(effort="max") for r in self.server.requests))
         self.assertEqual(self.saved_requests(), self.server.requests)
 
+    def test_in_instance_resume_restores_effort_and_does_not_reapply_cli_overrides(self):
+        self.server.mode = "echo"
+        self.run_batch("ORIGINAL", "--effort", "high")
+        target = self.session().name
+        p = Process(self, "--effort", "low")
+        try:
+            p.wait("New session:")
+            p.send("/resume " + target)
+            p.wait("Resumed session: " + target)
+            self.session = lambda: self.path / "state/harn/sessions" / target
+            p.send("FOLLOWUP")
+            p.wait("OK FOLLOWUP")
+            self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
+            self.assertEqual([item["content"] for item in self.server.requests[-1]["input"]
+                              if item.get("role") == "user"], ["ORIGINAL", "FOLLOWUP"])
+            p.send("/resume missing-session")
+            p.wait("Session belongs to a different project")
+            p.send("AFTER FAILURE")
+            p.wait("OK AFTER FAILURE")
+            self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
+            self.assertIn("ORIGINAL", [item.get("content") for item in self.server.requests[-1]["input"]
+                                       if item.get("role") == "user"])
+        finally:
+            p.finish()
+        self.run_batch("LOCK RELEASED", "--resume", target)
+
+    def test_in_instance_resume_stops_old_jobs_only_after_success(self):
+        self.server.mode = "echo"
+        self.run_batch("TARGET HISTORY")
+        target = self.session().name
+        self.server.mode = "jobs"
+        p = Process(self)
+        try:
+            p.wait("New session:")
+            current = p.buffer.split(b"New session: ", 1)[1].splitlines()[0].decode()
+            self.session = lambda: self.path / "state/harn/sessions" / current
+            p.send("TASK jobs")
+            p.wait("SERVER READY")
+            self.wait_path("port")
+            port = int((self.project / "port").read_text())
+            p.send("/resume missing-session")
+            p.wait("Session belongs to a different project")
+            with socket.create_connection(("127.0.0.1", port), timeout=2):
+                pass
+            p.send("/resume " + target)
+            p.wait("Resumed session: " + target)
+            self.assert_server_stopped()
+        finally:
+            p.finish()
+
+    def test_in_instance_resume_locked_target_preserves_current_session(self):
+        self.server.mode = "echo"
+        self.run_batch("LOCKED HISTORY")
+        target = self.session().name
+        owner = Process(self, "--resume", target)
+        p = Process(self)
+        try:
+            owner.wait("Resumed session:")
+            p.wait("New session:")
+            current = p.buffer.split(b"New session: ", 1)[1].splitlines()[0].decode()
+            self.session = lambda: self.path / "state/harn/sessions" / current
+            p.send("/resume " + target)
+            p.wait("Session is already open")
+            p.send("CURRENT HISTORY")
+            p.wait("OK CURRENT HISTORY")
+            self.assertEqual([item["content"] for item in self.server.requests[-1]["input"]
+                              if item.get("role") == "user"], ["CURRENT HISTORY"])
+            p.send("/context")
+            p.wait("Session: " + str(self.path / "state/harn/sessions" / current))
+            # A failed switch must retain the original journal lock as well.
+            result = self.run_batch("DO NOT RUN", "--resume", current, expected=1)
+            self.assertIn(b"Session is already open", result.stderr)
+        finally:
+            p.finish()
+            owner.finish()
+
     def test_commands_and_plain_continuation(self):
         self.server.mode = "echo"
         p = Process(self)
@@ -1618,7 +1694,7 @@ class Checks(unittest.TestCase):
             p.send("/help")
             p.wait("Ctrl-C: interrupt.")
             commands = set(line.split()[0].decode() for line in p.buffer.splitlines() if line.startswith(b"/"))
-            self.assertEqual(commands, {"/jobs", "/context", "/provider", "/model", "/effort", "/skill", "/compact", "/quit", "/help"})
+            self.assertEqual(commands, {"/jobs", "/context", "/provider", "/model", "/effort", "/resume", "/skill", "/compact", "/quit", "/help"})
             removed = ["/continue", "/models", "/skills", "/sessions", "/login", "/logout",
                        "/context raw", "/context summary", "/context 2"]
             for command in removed:

@@ -2,6 +2,7 @@
 """Check terminal presentation through a PTY against the local Responses fixture."""
 import errno
 import fcntl
+import json
 import os
 import pty
 import re
@@ -131,6 +132,53 @@ class Presentation(unittest.TestCase):
         self.assertNotIn(b"xhigh", self.output[mark:])
         self.assertNotIn(b"\r\n  medium", self.output[mark:])
         self.assertEqual(self.case.server.requests, [])
+
+    def test_effort_picker_loads_catalog_on_first_use(self):
+        self.start(width=42)
+        self.send("/ef\r")
+        self.read_until(lambda: b"\x1b[7mdefault" in self.output and b"xhigh" in self.output)
+        self.assertEqual(self.case.server.model_fetches, 1)
+        self.send("hi\r")
+        self.read_until(lambda: b"gpt-6.1-sol high" in self.output)
+        self.assertEqual(self.case.server.requests, [])
+
+    def test_resume_suggestions_filter_project_and_sort_by_activity(self):
+        base = self.case.path / "state/harn/sessions"
+        for name, root, nanos in [("older", self.case.project, 1),
+                                  ("recent", self.case.project, 2),
+                                  ("foreign", self.case.path, 3)]:
+            folder = base / name
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(json.dumps(dict(cwd=str(root), model="gpt-6.1-sol",
+                                                             provider="chatgpt")))
+            log = folder / "journal.jsonl"
+            log.write_text(json.dumps(dict(type="item", data=dict(role="user", content=name + " request"))) + "\n")
+            os.utime(log, ns=(1_700_000_000_000_000_000 + nanos,) * 2)
+        self.start(width=140)
+        self.send("/res\r")
+        self.read_until(lambda: b"\x1b[7mrecent" in self.output and b"older request" in self.output)
+        self.assertNotIn(b"foreign", self.output)
+        self.send("\x1b[B\r")
+        self.read_until(lambda: b"Resumed session: older" in self.output)
+        self.assertEqual(self.case.server.requests, [])
+        self.assertEqual(self.case.server.model_fetches, 0)
+
+    def test_resume_suggestions_switch_conversation_without_restart(self):
+        self.case.server.ui_stream = False
+        self.case.server.mode = "echo"
+        self.case.run_batch("PREVIOUS SESSION")
+        previous = self.case.session().name
+        self.start(width=80)
+        self.send("/res\r")
+        self.read_until(lambda: previous.encode() in self.output and b"PREVIOUS SESSION" in self.output)
+        self.assertIn(b"\x1b[7m", self.output)
+        self.send("\r")
+        self.read_until(lambda: ("Resumed session: " + previous).encode() in self.output)
+        self.send("CONTINUATION\r")
+        self.read_until(lambda: len(self.case.server.requests) == 2)
+        users = [item.get("content") for item in self.case.server.requests[-1]["input"]
+                 if item.get("role") == "user"]
+        self.assertEqual(users, ["PREVIOUS SESSION", "CONTINUATION"])
 
     def test_effort_completion_sets_value_and_updates_persistent_prompt(self):
         self.start(width=42)
@@ -325,9 +373,9 @@ class Presentation(unittest.TestCase):
     def test_suggestion_range_shows_hidden_items_and_tracks_scroll_and_wrap(self):
         self.start(width=42)
         self.send("/")
-        self.read_until(lambda: b"1-5 of 9" in self.output)
-        for key, position in [("\x10", b"5-9 of 9"), ("\x10", b"4-8 of 9"),
-                              ("\x0e", b"5-9 of 9"), ("\x0e", b"1-5 of 9")]:
+        self.read_until(lambda: b"1-5 of 10" in self.output)
+        for key, position in [("\x10", b"6-10 of 10"), ("\x10", b"5-9 of 10"),
+                              ("\x0e", b"6-10 of 10"), ("\x0e", b"1-5 of 10")]:
             mark = len(self.output)
             self.send(key)
             self.read_until(lambda: position in self.output[mark:])
@@ -339,17 +387,17 @@ class Presentation(unittest.TestCase):
         width = max(42, len(str(self.case.project).encode()) + 1)
         self.start(width=width, height=7)
         self.send("/")
-        self.read_until(lambda: b"1-1 of 9" in self.output)
+        self.read_until(lambda: b"1-1 of 10" in self.output)
         self.assertIn(b"\x1b[7m/compact", self.output)
         mark = len(self.output)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 6, width, 0, 0))
         self.send("\x0e")
-        self.read_until(lambda: b"2/9" in self.output[mark:])
+        self.read_until(lambda: b"2/10" in self.output[mark:])
         self.assertIn(b"\x1b[7m/context", self.output[mark:])
         mark = len(self.output)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 80, 0, 0))
         self.send("\x10")
-        self.read_until(lambda: b"1-5 of 9" in self.output[mark:]
+        self.read_until(lambda: b"1-5 of 10" in self.output[mark:]
                         and b"\x1b[7m/compact" in self.output[mark:])
         self.assertNotRegex(self.output, rb"\x1b\[-[0-9]+A")
         self.assertEqual(self.case.server.requests, [])

@@ -15,9 +15,17 @@ static const struct {
 } commands[] = {{"/compact", "Compact context"}, {"/context", "Show context"},
                 {"/effort", "Show or change reasoning effort"}, {"/help", "Show commands"}, {"/jobs", "Show local jobs"},
                 {"/model", "List or change model"}, {"/provider", "List or change provider"},
-                {"/quit", "Save and exit"}, {"/skill", "List skills"}};
+                {"/quit", "Save and exit"}, {"/resume", "Choose a previous session"}, {"/skill", "List skills"}};
+static json_t *resume_choices;
 static const char *completion_description(const char *candidate)
 {
+    if (!strncmp(candidate, "/resume ", 8)) {
+        size_t i;
+        json_t *session;
+        json_array_foreach(resume_choices, i, session)
+            if (!strcmp(candidate + 8, jstr(session, "id")))
+                return jstr(session, "description");
+    }
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++)
         if (!strcmp(candidate, commands[i].name))
             return commands[i].description;
@@ -34,7 +42,22 @@ static void complete(const char *input, linenoiseCompletions *out)
                 free(candidate);
             }
         }
+    } else if (!strncmp(input, "/resume ", 8)) {
+        json_decref(resume_choices);
+        resume_choices = sessions_catalog();
+        size_t i;
+        json_t *session;
+        json_array_foreach(resume_choices, i, session) {
+            const char *id = jstr(session, "id");
+            if (!strncmp(id, input + 8, strlen(input + 8))) {
+                char *candidate = fmt("/resume %s", id);
+                linenoiseAddCompletion(out, candidate);
+                free(candidate);
+            }
+        }
     } else if (!strncmp(input, "/effort ", 8)) {
+        if (!app.models && !json_is_object(json_object_get(app.model_info, "catalog")))
+            return;
         const char *level;
         for (size_t i = 0; (level = effort_at(i)); i++) {
             if (!strncmp(level, input + 8, strlen(input + 8))) {
@@ -199,9 +222,12 @@ static int visible_rows(void)
 }
 static void output_draw(int complete)
 {
+    /* A resize can arrive between output_resize and this draw. Keep the
+     * current frame's width until its scrollback has been released. */
+    int width = app.output_columns ? app.output_columns : columns();
     int kind = app.output_kind;
     json_t *frame = render_text(app.output_line.data ? app.output_line.data : "",
-                                app.output_line.len, columns(), kind == OUTPUT_TEXT ? (complete ? 2 : 1)
+                                app.output_line.len, width, kind == OUTPUT_TEXT ? (complete ? 2 : 1)
                                                                   : kind == OUTPUT_LOG ? -1 : 0,
                                 kind == OUTPUT_TEXT ? 0 : 2);
     size_t count = json_array_size(frame), old = json_array_size(app.output_frame);
@@ -242,7 +268,7 @@ static void output_draw(int complete)
     }
     json_decref(app.output_frame);
     app.output_frame = frame;
-    app.output_columns = columns();
+    app.output_columns = width;
     int visible = visible_rows();
     if ((int)count - app.output_skip > visible)
         app.output_skip = (int)count - visible;
@@ -649,6 +675,7 @@ void ui_command(char *line)
                  "/provider [name]  List providers or select one\n"
                  "/model [name]     List models or select one\n"
                  "/effort [level]   Show or change reasoning effort\n"
+                 "/resume [id]      Choose a previous session\n"
                  "/skill            List skills\n"
                  "/compact          Summarize earlier history\n"
                  "/quit             Save and exit\n"
@@ -674,6 +701,31 @@ void ui_command(char *line)
         connection_command(line + 9);
         return;
     }
+    if (!strncmp(line, "/resume", 7) && (line[7] == 0 || line[7] == ' ')) {
+        const char *id = line + 7;
+        while (*id == ' ')
+            id++;
+        if (app.busy || app.queued.len) {
+            message("Interrupt the current turn before switching sessions");
+            return;
+        }
+        if (!*id) {
+            json_t *catalog = sessions_catalog();
+            if (!json_array_size(catalog))
+                message("No previous sessions for this project");
+            else if (app.tty)
+                linenoiseEditReplace(&app.input, "/resume ", 8);
+            else {
+                size_t i;
+                json_t *session;
+                json_array_foreach(catalog, i, session)
+                    ui_print("%s  %s", jstr(session, "id"), jstr(session, "description"));
+            }
+            json_decref(catalog);
+        } else
+            session_switch(id);
+        return;
+    }
     if (!strncmp(line, "/effort", 7) && (line[7] == 0 || line[7] == ' ')) {
         const char *value = line + 7;
         while (*value == ' ')
@@ -693,6 +745,8 @@ void ui_command(char *line)
             for (size_t i = 0; (level = effort_at(i)); i++)
                 ui_print("  %s", level);
             ui_print("Supported levels depend on the model. default leaves effort to the provider.");
+            if (app.tty && !app.busy)
+                linenoiseEditReplace(&app.input, "/effort ", 8);
         } else if (app.busy)
             message("Interrupt the current turn before changing the effort");
         else if (!effort_supported(value))

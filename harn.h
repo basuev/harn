@@ -118,6 +118,8 @@ void context_budget(json_t *, const char *);
 void usage_record(json_t *);
 long context_input(void);
 void sessions_list(void);
+json_t *sessions_catalog(void);
+int session_switch(const char *);
 void session_show(int);
 const char *effort_at(size_t);
 int effort_select(const char *);

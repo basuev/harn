@@ -37,6 +37,12 @@ Resume the most recently active session for that directory:
 harn --resume
 ```
 
+Inside a running instance, `/resume` opens suggestions for previous sessions in
+that project, most recently active first, with the first request as a preview.
+Select with arrows or Ctrl-N/P and press Enter. Switching stops the previous
+session's owned processes, just like exiting it. A failed switch leaves the
+current session and its processes intact.
+
 `harn --help` lists startup options. `/help` lists conversation commands.
 
 ## Configuration

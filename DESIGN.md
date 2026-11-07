@@ -124,6 +124,12 @@ packages.
 
 ## History and context
 
+In-instance resume keeps the current session open until the target has loaded
+and acquired its journal lock. Failure must preserve the current conversation
+and owned jobs. Success ends the old session's process ownership before exposing
+the resumed conversation. Startup provider, model and effort overrides apply only
+to startup, not to later session selections.
+
 Resume reconstructs the conversation, not the execution of saved actions.
 Unknown outcomes remain unknown until inspected. Interrupting work does not
 roll back completed changes. Compaction replaces part of the model's active
@@ -161,7 +167,10 @@ occurred. `default` omits the API field and is not the same as `none`. Historica
 sessions that omitted it must keep that behavior unless explicitly overridden.
 New sessions default to provider-controlled effort. Available explicit values
 come from the selected model's `supported_reasoning_levels` catalog metadata,
-not a universal list. Without that metadata only `default` is exposed. New
+not a universal list. Without that metadata only `default` is exposed. Before a
+catalog or saved capabilities are loaded, completion must not offer a misleading
+default-only picker. Selecting `/effort` loads capabilities first,
+then opens its argument suggestions without making an inference request. New
 catalog levels need no client rebuild. Saved catalog capabilities remain usable
 during the same temporary outages as saved context metadata.
 
