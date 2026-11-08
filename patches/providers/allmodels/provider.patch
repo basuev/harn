@@ -1,0 +1,85 @@
+diff --git a/providers/allmodels/check.py b/providers/allmodels/check.py
+new file mode 100644
+index 0000000..a5f711e
+--- /dev/null
++++ b/providers/allmodels/check.py
+@@ -0,0 +1,8 @@
++#!/usr/bin/env python3
++from pathlib import Path
++import sys
++sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
++from provider_contract import Contract, run
++
++if __name__ == "__main__":
++    run("allmodels", key_env="ALLMODELS_API_KEY")
+diff --git a/providers/allmodels/config.example.h b/providers/allmodels/config.example.h
+new file mode 100644
+index 0000000..9b9e013
+--- /dev/null
++++ b/providers/allmodels/config.example.h
+@@ -0,0 +1,15 @@
++/* Complete example for a new local config.h. Merge into an existing config. */
++#ifdef CONFIG_CONNECTIONS
++#undef CONFIG_CONNECTIONS
++#define PROVIDER_CONNECTIONS
++#endif
++#include "config.def.h"
++#undef DEFAULT_PROVIDER
++#define DEFAULT_PROVIDER "allmodels"
++#ifdef PROVIDER_CONNECTIONS
++#include "providers/allmodels/provider.h"
++static const Connection connections[] = {
++    {"allmodels", "https://api.allmodels.io/oai", "ALLMODELS_API_KEY", "deepseek/deepseek-v4.1-flash-abliterated", &allmodels_provider},
++    {0},
++};
++#endif
+diff --git a/providers/allmodels/provider.c b/providers/allmodels/provider.c
+new file mode 100644
+index 0000000..e60386a
+--- /dev/null
++++ b/providers/allmodels/provider.c
+@@ -0,0 +1,10 @@
++#include "harn.h"
++#include "provider.h"
++
++const Provider allmodels_provider = {
++    .id = "allmodels", .revision = "1", .auth_label = "API key",
++    .request_path = "/responses", .ready = api_key_ready, .logout = api_key_logout,
++    .models = responses_models, .catalog = catalog_data, .headers = bearer_headers,
++    .encode = responses_encode, .event = responses_event,
++    .legacy = api_key_legacy,
++};
+diff --git a/providers/allmodels/provider.h b/providers/allmodels/provider.h
+new file mode 100644
+index 0000000..39e15a5
+--- /dev/null
++++ b/providers/allmodels/provider.h
+@@ -0,0 +1,4 @@
++#ifndef HARN_PROVIDER_ALLMODELS_H
++#define HARN_PROVIDER_ALLMODELS_H
++extern const Provider allmodels_provider;
++#endif
+diff --git a/providers/allmodels/test-config.h b/providers/allmodels/test-config.h
+new file mode 100644
+index 0000000..1050593
+--- /dev/null
++++ b/providers/allmodels/test-config.h
+@@ -0,0 +1,18 @@
++#ifdef CONFIG_CONNECTIONS
++#undef CONFIG_CONNECTIONS
++#define ADAPTER_TEST_CONNECTIONS
++#endif
++#include "../../config.def.h"
++#undef DEFAULT_PROVIDER
++#define DEFAULT_PROVIDER "allmodels"
++#undef DEFAULT_EFFORT
++#define DEFAULT_EFFORT "medium"
++#ifdef ADAPTER_TEST_CONNECTIONS
++#include "provider.h"
++#include "tests/fixture.h"
++static const Connection connections[] = {
++    {"allmodels", "http://provider.fixture.invalid/v1", "ALLMODELS_API_KEY", "fixture-model", &allmodels_provider},
++    {"fixture-key", "http://second.fixture.invalid/v1", "HARN_SECOND_KEY", "fixture-model", &fixture_provider},
++    {0},
++};
++#endif

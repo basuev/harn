@@ -52,7 +52,7 @@ including on resume. Unsupported choices fail without silent substitution.
 ## Local configuration
 
 `config.h` and applied adapters under `providers/` are local and ignored by Git.
-The public patch catalog lives in `patches/providers/`. Standard releases export
+The public patch catalog lives in [patches/providers/](patches/providers/). Standard releases export
 committed, unpatched sources rather than the personal working tree.
 
 - Personal instructions: `~/.config/harn/AGENTS.md`.

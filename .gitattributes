@@ -1,0 +1,2 @@
+# Patch payloads preserve upstream whitespace, including vendored sources.
+patches/**/*.patch -whitespace
