@@ -43,13 +43,15 @@ class Contract(unittest.TestCase):
     def test_switch_isolates_connections_and_preserves_jobs(self):
         self.server.mode = "plan"
         self.server.tool_plan = [
-            [check.call("exec", dict(command="sleep 30", background=True), "keep")],
+            [dict(type="reasoning", encrypted_content="opaque-provider-state", id="private-reasoning", summary=[]),
+             check.call("exec", dict(command="sleep 30", background=True), "keep")],
             [check.text("OK JOB READY")],
         ]
         p = check.Process(self)
         try:
             p.send("START")
             p.wait("OK JOB READY")
+            self.assertTrue(any(item.get("type") == "reasoning" for item in self.server.requests[-1]["input"]))
             self.server.mode = "echo"
             self.server.model_metadata = dict(supported_reasoning_levels=None)
             p.send("/provider fixture-key")
@@ -107,11 +109,13 @@ class Contract(unittest.TestCase):
     def test_text_is_visible_before_completion_in_a_terminal(self):
         self.server.mode = "plan"
         self.server.ui_stream = True
-        self.server.tool_plan = [[check.text("VISIBLE GATE_OK FINISHED")]]
+        self.server.tool_plan = [[check.text("Before GATE_OK FINISHED")]]
         gate = threading.Event()
+        blocked = threading.Event()
         def hold(chunk):
             if chunk == "GATE_OK":
-                gate.wait(5)
+                blocked.set()
+                gate.wait(15)
         self.server.ui_delta_hook = hold
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 80, 0, 0))
@@ -130,6 +134,7 @@ class Contract(unittest.TestCase):
             wait_for(b"ctx:")
             os.write(master, b"TASK\r")
             wait_for(b"GATE_OK")
+            self.assertTrue(blocked.is_set())
             self.assertFalse(any(r["type"] == "item" and r["data"].get("role") == "assistant"
                                  for r in self.records()))
             gate.set()
