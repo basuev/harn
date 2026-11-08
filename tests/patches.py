@@ -74,7 +74,8 @@ def main():
                 assert (name + "@1").encode() in output, output
             if not names:
                 assert len(output.splitlines()) == 1, output
-                assert not (source / ".build/chatgpt-jwt").exists()
+                assert not (source / "providers").exists()
+                assert not (source / "vendor/libjwt").exists()
                 rejected = subprocess.run([str(installed)], cwd=source, env=env, input=b"", capture_output=True)
                 assert rejected.returncode == 2 and b"No provider configured" in rejected.stderr
                 assert not list((home / "state/harn/sessions").glob("*/journal.jsonl"))

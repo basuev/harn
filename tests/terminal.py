@@ -381,7 +381,7 @@ def main():
         t.send("MEASURE")
         t.wait_answer("OK MEASURE")
         fetches = case.server.model_fetches
-        t.text("/model gpt")
+        t.text("/model fix")
         t.key("Tab")
         t.observe("cached-model-preview")
         t.key("Return")
