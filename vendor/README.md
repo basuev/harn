@@ -22,9 +22,3 @@ prompt. Short pastes remain visible. Long pastes retain the upstream folding
 mechanism. Rendering remains based on linenoise.
 Raw mode is retained between submitted messages so local command output cannot
 flush already queued keystrokes. Editor handoff and exit still restore it.
-
-LibJWT 3.6.1 comes from benmcollins/libjwt at
-`94e3cdf35d120c4d869851714a2cf9f582e9b61e`. Its sources and upstream build files
-are included under MPL-2.0, see [libjwt/LICENSE](libjwt/LICENSE). The application
-build enables the OpenSSL and Jansson backends and builds only the static
-library target.

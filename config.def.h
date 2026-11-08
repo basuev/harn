@@ -1,11 +1,12 @@
 #define VERSION "0.1.0"
-#define DEFAULT_PROVIDER "chatgpt"
+#define DEFAULT_PROVIDER ""
 #define DEFAULT_EFFORT "default" /* Use the selected model's provider default. */
 #ifdef CONFIG_CONNECTIONS
-/* name, Responses API base, key environment variable, default model.
- * Add personal connections to config.h. Never put key values here. */
+/* Install provider patches and register connections in local config.h.
+ * Entries: name, API base, key environment variable, model, adapter.
+ * Keep the final sentinel. Never put key values here. */
 static const Connection connections[] = {
-    {"chatgpt", "https://api.openai.com/v1", "", "gpt-6.1-sol"},
+    {0},
 };
 #endif
 #define CONTEXT_LIMIT 0

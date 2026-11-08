@@ -31,13 +31,13 @@ def text(value):
 
 class Fixture(http.server.ThreadingHTTPServer):
     daemon_threads = True
-    def __init__(self):
-        super().__init__(("127.0.0.1", 0), Handler)
+    def __init__(self, handler=None):
+        super().__init__(("127.0.0.1", 0), handler or Handler)
         self.requests = []
         self.auth_headers = []
         self.discovery_calls = 0
         self.standard_catalog = False
-        self.model_id = "gpt-6.1-sol"
+        self.model_id = "fixture-model"
         self.key_model_id = None
         self.key_window = None
         self.completed_only = False
@@ -85,11 +85,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
 
     def do_GET(self):
-        if self.path == "/.well-known/openid-configuration":
-            self.server.discovery_calls += 1
-            base = "http://127.0.0.1:" + str(self.server.server_port)
-            self.fixed(dict(issuer=base, token_endpoint=base + "/token", authorization_endpoint=base + "/authorize", jwks_uri=base + "/jwks"))
-        elif self.path == "/v1/models":
+        if self.path == "/v1/models":
             self.server.model_fetches += 1
             if self.server.model_delay:
                 self.server.model_waiting.set()
@@ -124,26 +120,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.fixed(dict(error=dict(message="Unknown fixture")), 404)
 
     def event(self, obj):
-        self.wfile.write(b"data: " + json.dumps(obj, ensure_ascii=False).encode() + b"\n\n")
-        self.wfile.flush()
+        data = b"data: " + json.dumps(obj, ensure_ascii=False).encode() + b"\n\n"
+        step = 3 if getattr(self.server, "fragment_events", False) else len(data)
+        for offset in range(0, len(data), step):
+            self.wfile.write(data[offset:offset + step])
+            self.wfile.flush()
 
     def do_POST(self):
         raw = self.rfile.read(int(self.headers["Content-Length"]))
-        if self.path == "/token":
-            self.server.token_calls += 1
-            time.sleep(.15)
-            if self.server.mode == "refresh-failure":
-                self.fixed(dict(error="temporarily_unavailable"), 503)
-            else:
-                self.fixed(dict(access_token="rotated-private", refresh_token="rotated-refresh", expires_in=3600, scope="chatgpt.tokens.use.direct"))
-            return
         request = json.loads(raw)
         s = self.server
         s.requests.append(request)
         s.auth_headers.append(self.headers.get("Authorization"))
         s.count += 1
         if s.response_status != 200:
-            self.fixed(dict(error=dict(code="invalid_api_key", message="Fixture rejected key")), s.response_status)
+            message = self.headers.get("Authorization") if getattr(s, "echo_auth_error", False) else "Fixture rejected key"
+            self.fixed(dict(error=dict(code="invalid_api_key", message=message)), s.response_status)
             return
         mode, count = s.mode, s.count
         if mode == "fail" or mode == "retry" and count == 1:
@@ -394,11 +386,9 @@ class Checks(unittest.TestCase):
         self.project.mkdir()
         self.config = self.path / "config/harn"
         self.config.mkdir(parents=True)
-        (self.config / "registration.json").write_text(json.dumps(dict(client_id="fixture", ext_agent_host_id="fixture")))
-        (self.config / "credentials.json").write_text(json.dumps(dict(access_token="NEVER_IN_JOURNAL", refresh_token="private-refresh",
-                                                                   scope="chatgpt.tokens.use.direct", saved_at=int(time.time()), expires_in=3600)))
         self.env = dict(os.environ, HOME=str(self.user_home), XDG_CONFIG_HOME=str(self.path / "config"), XDG_STATE_HOME=str(self.path / "state"), HARN_NO_BROWSER="1")
-        self.server = Fixture()
+        self.env["HARN_FIXTURE_KEY"] = "NEVER_IN_JOURNAL"
+        self.server = getattr(self, "fixture_class", Fixture)()
         self.env["HARN_API_BASE"] = "http://127.0.0.1:" + str(self.server.server_port) + "/v1"
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         (self.project / "a.py").write_text("answer = 1\n")
@@ -553,7 +543,7 @@ class Checks(unittest.TestCase):
         self.assertIn(b"jobs #", p.stderr)
         self.assertEqual(p.stderr.decode().splitlines()[:4],
                          ["New session: " + self.session().name, "Project: " + str(self.project),
-                          "Provider: chatgpt", "Model: gpt-6.1-sol"])
+                          "Provider: fixture", "Model: fixture-model"])
         self.assertIn(b"@@ -1,1 +1,1 @@", p.stderr)
         self.assertIn(b"-answer = 1", p.stderr)
         self.assertIn(b"+answer = 2", p.stderr)
@@ -984,8 +974,6 @@ class Checks(unittest.TestCase):
         self.server.mode = "echo"
         config = self.user_home / ".config/harn"
         config.mkdir(parents=True)
-        for name in ("registration.json", "credentials.json"):
-            (config / name).write_bytes((self.config / name).read_bytes())
         global_file = config / "AGENTS.md"
         global_file.write_text("HOME_CONFIG_GLOBAL_753")
         for value in (None, ""):
@@ -1462,9 +1450,10 @@ class Checks(unittest.TestCase):
 
     def test_effort_choices_and_preferences_follow_model_and_resume(self):
         self.server.mode = "echo"
-        self.server.extra_models = [dict(slug="default-only", visibility="list"),
-            dict(slug="future-model", visibility="list",
-                 supported_reasoning_levels=[dict(effort="ultra")])]
+        field = "id" if self.server.standard_catalog else "slug"
+        self.server.extra_models = [{field: "default-only", "visibility": "list"},
+            {field: "future-model", "visibility": "list",
+             "supported_reasoning_levels": [dict(effort="ultra")]}]
         p = Process(self)
         try:
             p.send("FIRST")
@@ -1485,8 +1474,8 @@ class Checks(unittest.TestCase):
             p.send("FUTURE")
             p.wait("OK FUTURE")
             self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="ultra"))
-            p.send("/model gpt-6.1-sol")
-            p.wait("Model: gpt-6.1-sol")
+            p.send("/model fixture-model")
+            p.wait("Model: fixture-model")
             p.send("RESTORED")
             p.wait("OK RESTORED")
             self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
@@ -1851,28 +1840,6 @@ class Checks(unittest.TestCase):
         self.server.mode = "paging"
         (self.project / "long.txt").write_text("Я" * 20000)
         self.assertIn(b"PAGING COMPLETE", self.run_batch("READ LONG FILE").stdout)
-
-    def test_refresh_failure_preserves_credentials_and_concurrent_refresh_rotates_once(self):
-        self.env["HARN_AUTH_ISSUER"] = "http://127.0.0.1:" + str(self.server.server_port)
-        path = self.config / "credentials.json"
-        original = path.read_bytes()
-        self.server.mode = "refresh-failure"
-        p = subprocess.run([str(BINARY), "--login"], env=self.env, capture_output=True, timeout=5)
-        self.assertEqual(p.returncode, 1)
-        self.assertEqual(path.read_bytes(), original)
-        expired = json.loads(original)
-        expired["saved_at"] = 0
-        path.write_text(json.dumps(expired))
-        self.server.mode = "echo"
-        self.server.token_calls = 0
-        processes = [subprocess.Popen([str(BINARY), "-C", str(self.project), "-p", "REFRESH"], env=self.env,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(2)]
-        for p in processes:
-            out, err = p.communicate(timeout=10)
-            self.assertEqual(p.returncode, 0, (out, err))
-        self.assertEqual(self.server.token_calls, 1)
-        self.assertEqual(json.loads(path.read_text())["access_token"], "rotated-private")
-        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_program_identity_and_home_paths(self):
         for option in ("--help", "--version"):

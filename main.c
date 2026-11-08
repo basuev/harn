@@ -53,7 +53,7 @@ void pump(int timeout)
     }
     if (app.net && app.net->done)
         return;
-    size_t count = 5;
+    size_t count = 2 + (size_t)auth_pollfds(NULL);
     for (Job *j = app.jobs; j; j = j->next)
         if (j->fd >= 0)
             count++;
@@ -319,7 +319,7 @@ int main(int argc, char **argv)
             return 0;
         }
         if (!strcmp(arg, "--version")) {
-            puts("harn " VERSION);
+            provider_version();
             return 0;
         }
         if (!strcmp(arg, "-C")) {
@@ -378,6 +378,10 @@ int main(int argc, char **argv)
         perror("state directory");
         return 1;
     }
+    if (action == 4) {
+        sessions_list();
+        return 0;
+    }
     char *model_option = app.model_override ? xstrdup(app.model) : NULL;
     if (!connection_select(app.connection_override ? app.connection_override : DEFAULT_PROVIDER))
         return 2;
@@ -385,8 +389,6 @@ int main(int argc, char **argv)
         free(app.model);
         app.model = model_option;
     }
-    app.issuer = xstrdup(getenv("HARN_AUTH_ISSUER") ? getenv("HARN_AUTH_ISSUER")
-                                                   : "https://auth.openai.com");
     if (pipe(app.signal_pipe)) {
         perror("pipe");
         return 1;
@@ -425,8 +427,6 @@ int main(int argc, char **argv)
             ok = auth_logout();
         if (action == 3)
             ok = models_list(1);
-        if (action == 4)
-            sessions_list();
         app.exit_status = !ok;
         goto finish;
     }
@@ -476,6 +476,7 @@ finish:
     jobs_shutdown();
     ui_close();
     session_close();
+    auth_release();
     provider_close();
     close(app.signal_pipe[0]);
     close(app.signal_pipe[1]);

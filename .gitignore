@@ -1,6 +1,7 @@
 /.build/
 /harn
 /config.h
+/providers/
 /dist/
 /.local/
 __pycache__/

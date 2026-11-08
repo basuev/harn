@@ -8,12 +8,13 @@ Shell commands, project files, and skill packages are the extension boundary.
 A plugin runtime, a model SDK, and a dependency on another coding client are
 outside that boundary.
 
-Public defaults and personal configuration have different ownership. Release
-builds use `config.def.h` even when the working tree has a personal `config.h`.
-This prevents a contributor's endpoints and model preferences from becoming
-public product defaults. The ignored local file survives builds and is never
-packaged. Fixture connections are isolated from both installed and release
-binaries.
+Public defaults and personal configuration have different ownership. The core
+has no built-in service connections. Provider implementations are optional source
+patches, applied locally under ignored `providers/` and registered in `config.h`.
+Release builds export committed sources into a clean directory and use
+`config.def.h`. Merely selecting public configuration would not remove applied
+adapter sources. Neither personal configuration nor applied modules is packaged.
+Fixture connections are isolated from installed and release binaries.
 
 Adding an infrequent connection may require rebuilding. Switching among
 configured connections during a conversation must not require another binary
@@ -21,6 +22,9 @@ or restart. The same tools, journal, and process accounting serve every
 connection.
 
 Validation stays in local Makefile targets. Hosted CI is deliberately omitted.
+
+`README.md` and `DESIGN.md` are the root documentation entry points. Detailed
+contracts and integration references belong in `docs/`.
 
 The version remains 0.1.0 until the first published release. Local rebuilds and
 interface changes alone do not require a version increase.
@@ -56,7 +60,8 @@ libcurl multi was selected after testing HTTPS streaming alongside terminal
 input and child output. Asynchronous DNS is required to preserve responsiveness.
 Jansson is the single JSON representation for both network traffic and state.
 LibJWT with OpenSSL was selected after isolated ID-token validation checks
-rather than implementing JWT verification locally. LibJWT is linked statically.
+rather than implementing JWT verification locally. The optional subscription adapter owns LibJWT and its static build. Core and
+API-key-only builds do not need that dependency or the OAuth crypto code.
 
 LibYAML preserves compatibility with standard SKILL.md frontmatter, including
 multiline descriptions. MD4C avoids maintaining a separate Markdown grammar.
@@ -71,11 +76,13 @@ licenses belong in the release archive.
 
 ## Provider contract
 
-The transport requires stateless Responses requests with streaming and function
-calls. An "OpenAI-compatible" label alone does not establish that contract.
-Chat Completions and upstream-provider routing are outside the current scope.
-ChatGPT uses its own public subscription authorization, separate from journals
-and from other clients' credentials.
+The core uses Responses-shaped history items and supplies a reusable HTTP/SSE
+transport and Responses codec. Adapters translate their wire protocol to these
+items and own authentication, catalogs and service-specific error classification.
+An "OpenAI-compatible" label alone does not establish correct streaming, function
+calls or stateless continuation. A different protocol needs an adapter, not a
+second agent loop. Subscription authorization belongs to its optional patch,
+separate from journals and from other clients' credentials.
 
 A real subscription response established that
 `response.completed.response.output` can be empty after completed tool calls
@@ -89,6 +96,12 @@ Switching preserves conversation facts and function-call/result pairs without
 forwarding the earlier provider's opaque reasoning, item IDs, or namespace
 metadata. Original items stay intact in the journal. Equal model IDs do not
 justify sharing authorization or context metadata between connections.
+
+Connections select an explicit statically linked adapter. An empty key variable
+never selects an authentication protocol implicitly. Optional poll/tick callbacks
+serve browser authorization through the same cancellable event loop. Opaque
+adapter state is released when leaving its connection. API-key helpers and
+Responses codecs are shared, service-specific behavior is not.
 
 Endpoint settings come from the current build rather than stale journal URLs.
 A saved conversation does not provide credentials. A public model catalog also
@@ -188,3 +201,11 @@ historical interpretation, but is not per-response confirmation of server effort
 
 Optional decision helpers belong outside the core, using the shell and file
 extension boundary. They are not a shipped routing layer or a runtime dependency.
+
+## Provider patch contract
+
+The [provider patch contract](docs/PROVIDER_PATCHES.md) defines the adapter boundary,
+source-level interfaces, acceptance tests and installation. Patches are pinned to
+an exact core commit rather than a stable plugin ABI. Keeping ordinary adapters
+in disjoint directories lets them compose without editing shared source files.
+Changes to the common boundary belong in the core, not in adapter dependencies.

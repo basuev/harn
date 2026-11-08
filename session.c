@@ -807,8 +807,7 @@ static void session_exchange(App *other)
     EXCHANGE(connection_models);
     EXCHANGE(efforts);
     EXCHANGE(credentials);
-    EXCHANGE(registration);
-    EXCHANGE(discovery);
+    EXCHANGE(provider_state);
     EXCHANGE(models);
     EXCHANGE(model_info);
     EXCHANGE(items);
@@ -848,9 +847,7 @@ static void session_dispose(void)
     free(app.summary);
     json_decref(app.connection_models);
     json_decref(app.efforts);
-    json_decref(app.credentials);
-    json_decref(app.registration);
-    json_decref(app.discovery);
+    auth_release();
     json_decref(app.models);
     json_decref(app.model_info);
     json_decref(app.items);
@@ -877,8 +874,6 @@ int session_switch(const char *id)
     app.effort = xstrdup("default");
     app.api_base = xstrdup(previous.api_base);
     app.credentials = json_incref(previous.credentials);
-    app.registration = json_incref(previous.registration);
-    app.discovery = json_incref(previous.discovery);
     const char *provider_override = app.connection_override, *effort_override = app.effort_override;
     int model_override = app.model_override;
     app.connection_override = app.effort_override = NULL;

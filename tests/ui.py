@@ -70,7 +70,7 @@ class Presentation(unittest.TestCase):
     def assert_project_prompt(self, output, status):
         plain = re.sub(rb"\x1b\[[0-9;]*[A-Za-z]", b"", output)
         plain = plain.replace(b"\r", b"").replace(b"\n", b"")
-        self.assertIn(str(self.case.project).encode() + b"gpt-6.1-sol medium" + status, plain)
+        self.assertIn(str(self.case.project).encode() + b"fixture-model medium" + status, plain)
 
     def test_full_project_path_stays_in_prompt_during_inference_and_resize(self):
         # A path longer than the former prompt buffer, with wide UTF-8 characters.
@@ -120,7 +120,7 @@ class Presentation(unittest.TestCase):
     def load_catalog(self):
         mark = len(self.output)
         self.send("/model\r")
-        self.read_until(lambda: b"  gpt-6.1-sol" in self.output[mark:])
+        self.read_until(lambda: b"  fixture-model" in self.output[mark:])
 
     def test_effort_completion_only_offers_the_selected_models_catalog_levels(self):
         self.case.server.model_metadata = dict(supported_reasoning_levels=None)
@@ -139,7 +139,7 @@ class Presentation(unittest.TestCase):
         self.read_until(lambda: b"\x1b[7mdefault" in self.output and b"xhigh" in self.output)
         self.assertEqual(self.case.server.model_fetches, 1)
         self.send("hi\r")
-        self.read_until(lambda: b"gpt-6.1-sol high" in self.output)
+        self.read_until(lambda: b"fixture-model high" in self.output)
         self.assertEqual(self.case.server.requests, [])
 
     def test_resume_suggestions_filter_project_and_sort_by_activity(self):
@@ -149,8 +149,8 @@ class Presentation(unittest.TestCase):
                                   ("foreign", self.case.path, 3)]:
             folder = base / name
             folder.mkdir(parents=True)
-            (folder / "meta.json").write_text(json.dumps(dict(cwd=str(root), model="gpt-6.1-sol",
-                                                             provider="chatgpt")))
+            (folder / "meta.json").write_text(json.dumps(dict(cwd=str(root), model="fixture-model",
+                                                             provider="fixture")))
             log = folder / "journal.jsonl"
             log.write_text(json.dumps(dict(type="item", data=dict(role="user", content=name + " request"))) + "\n")
             os.utime(log, ns=(1_700_000_000_000_000_000 + nanos,) * 2)
@@ -187,7 +187,7 @@ class Presentation(unittest.TestCase):
         self.read_until(lambda: b"\x1b[7mxhigh" in self.output)
         mark = len(self.output)
         self.send("\r")
-        self.read_until(lambda: b"gpt-6.1-sol xhigh" in self.output[mark:])
+        self.read_until(lambda: b"fixture-model xhigh" in self.output[mark:])
         self.assertNotIn(b"effort:", self.output[mark:])
         self.assertEqual(self.case.server.requests, [])
         self.assertEqual(self.case.server.model_fetches, 1)
@@ -211,7 +211,7 @@ class Presentation(unittest.TestCase):
         mark = len(self.output)
         self.send("\r")
         self.read_until(lambda: b"> /provider " in self.output[mark:])
-        self.assertIn(b"\x1b[7mchatgpt", self.output[mark:])
+        self.assertIn(b"\x1b[7mfixture", self.output[mark:])
         self.assertNotIn(b"Unknown command", self.output)
         self.assertEqual(self.case.server.model_fetches, 0)
         self.send("\x03")
@@ -243,7 +243,7 @@ class Presentation(unittest.TestCase):
         self.send("/mo")
         self.read_until(lambda: b"\x1b[7m/model" in self.output)
         self.send("\r")
-        self.read_until(lambda: b"  gpt-6.1-sol" in self.output)
+        self.read_until(lambda: b"  fixture-model" in self.output)
         self.assertEqual(self.case.server.model_fetches, 1)
         self.assertEqual(self.case.server.requests, [])
 
@@ -254,7 +254,7 @@ class Presentation(unittest.TestCase):
         self.read_until(lambda: b"> /effort " in self.output and b"\x1b[7mdefault" in self.output)
         self.assertEqual(self.case.server.requests, [])
         self.send("hi\r")
-        self.read_until(lambda: b"gpt-6.1-sol high" in self.output)
+        self.read_until(lambda: b"fixture-model high" in self.output)
         self.assertEqual(self.case.server.model_fetches, 1)
         self.assertEqual(self.case.server.requests, [])
 

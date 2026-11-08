@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Build, test, and install a release's sources without personal configuration."""
-import json
+"""Verify an unpatched core archive, fixture checks and native installation."""
 import os
 from pathlib import Path
 import subprocess
@@ -22,36 +21,30 @@ def main():
             bundle.extractall(work, filter="data")
         release = work / name
         source = release / "source"
-        assert {p.name for p in release.iterdir()} == {
-            "bin", "licenses", "source", "README.md", "DESIGN.md", "LICENSE"}
-        forbidden = {".build", ".git", ".local", "dist", "__pycache__", "SYSTEM_ONE_RESEARCH.md"}
+        assert {p.name for p in release.iterdir()} == {"bin", "licenses", "source"}
+        forbidden = {".build", ".git", ".local", "dist", "__pycache__"}
+        assert not (source / "providers").exists()
         for path in source.rglob("*"):
             assert not forbidden.intersection(path.relative_to(source).parts), path
         assert not (source / "harn").exists()
         assert not (source / "config.h").exists()
-        assert b"api.allmodels.io" not in (release / "bin/harn").read_bytes()
-        assert b"ALLMODELS_API_KEY" not in (release / "bin/harn").read_bytes()
-        for name in ("README.md", "DESIGN.md", "LICENSE"):
-            assert (release / name).read_bytes() == (source / name).read_bytes()
-        for name in (".gitignore", ".clang-format", "Makefile", "config.def.h", "harn.h"):
-            assert (source / name).is_file(), name
-        for library in ("libjwt", "linenoise"):
-            assert (release / "licenses" / ("LICENSE." + library)).read_bytes() == (
-                source / "vendor" / library / "LICENSE").read_bytes()
+        assert not (source / "vendor/libjwt").exists()
+        binary = (release / "bin/harn").read_bytes()
+        for secret in (b"api.allmodels.io", b"api.refuseless.com", b"chatgpt.tokens.use.direct"):
+            assert secret not in binary
+        assert (source / "docs/PROVIDER_PATCHES.md").is_file()
+        assert (release / "licenses/LICENSE").read_bytes() == (source / "LICENSE").read_bytes()
+        assert (release / "licenses/LICENSE.linenoise").read_bytes() == (source / "vendor/linenoise/LICENSE").read_bytes()
 
         home = work / "home"
         home.mkdir()
         scratch = work / "tmp"
         scratch.mkdir()
         env = {
-            "PATH": os.environ.get("PATH", os.defpath),
-            "HOME": str(home),
-            "XDG_CONFIG_HOME": str(home / ".config"),
-            "XDG_STATE_HOME": str(home / ".local/state"),
-            "XDG_CACHE_HOME": str(home / ".cache"),
-            "TMPDIR": str(scratch),
-            "LC_ALL": "C.UTF-8",
-            "TERM": "xterm",
+            "PATH": os.environ.get("PATH", os.defpath), "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / ".config"), "XDG_STATE_HOME": str(home / ".local/state"),
+            "XDG_CACHE_HOME": str(home / ".cache"), "TMPDIR": str(scratch),
+            "LC_ALL": "C.UTF-8", "TERM": "xterm",
         }
         run(["make", "-j2"], source, env)
         run(["make", "check"], source, env)
@@ -60,27 +53,20 @@ def main():
         installed = prefix / "bin/harn"
         assert installed.read_bytes() == (source / "harn").read_bytes()
         assert str(source).encode() not in installed.read_bytes()
-        assert str(Path.home()).encode() not in (release / "bin/harn").read_bytes()
-        assert (prefix / "share/licenses/harn/LICENSE").read_bytes() == (
-            source / "LICENSE").read_bytes()
-        for library in ("libjwt", "linenoise"):
-            assert (prefix / "share/licenses/harn" / ("LICENSE." + library)).read_bytes() == (
-                source / "vendor" / library / "LICENSE").read_bytes()
-
-        # Native startup must not need a compiler or a language runtime on PATH.
+        assert str(Path.home()).encode() not in binary
+        assert (prefix / "share/licenses/harn/LICENSE").read_bytes() == (source / "LICENSE").read_bytes()
+        assert not (prefix / "share/licenses/harn/LICENSE.libjwt").exists()
         runtime = dict(env, PATH="/nonexistent")
-        expected = run([str(source / "harn"), "--version"], source, runtime,
-                       capture_output=True).stdout
-        for binary in (installed, release / "bin/harn"):
-            assert run([str(binary), "--version"], source, runtime,
-                       capture_output=True).stdout == expected
-        run([str(installed)], source, runtime, input=b"/context\n/quit\n", capture_output=True)
-        journals = list((home / ".local/state/harn/sessions").glob("*/journal.jsonl"))
-        assert len(journals) == 1
-        records = [json.loads(line) for line in journals[0].read_text().splitlines()]
-        assert not any(record["type"] == "request" for record in records)
+        for executable in (installed, release / "bin/harn"):
+            for option in ("--help", "--version", "--sessions"):
+                run([str(executable), option], source, runtime, capture_output=True)
+            result = subprocess.run([str(executable)], cwd=source, env=runtime,
+                                    input=b"", capture_output=True, timeout=5)
+            assert result.returncode == 2, result
+            assert b"No provider configured" in result.stderr
+        assert not list((home / ".local/state/harn/sessions").glob("*/journal.jsonl"))
         assert not (home / ".config/harn/credentials.json").exists()
-    print("Release sources, fixture tests, user-prefix installation, licenses, and native startup verified.")
+    print("Unpatched release, fixture checks, licenses and native installation verified.")
 
 
 if __name__ == "__main__":

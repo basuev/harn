@@ -21,7 +21,7 @@ void provider_close(void)
         curl_multi_cleanup(app.multi);
     curl_global_cleanup();
 }
-static void stream_event(Net *n)
+void responses_event(Net *n)
 {
     if (!n->data.len)
         return;
@@ -90,7 +90,7 @@ static void stream_line(Net *n)
     if (n->line.len && n->line.data[n->line.len - 1] == '\r')
         n->line.data[--n->line.len] = 0;
     if (!n->line.len)
-        stream_event(n);
+        app.connection->provider->event(n);
     else if (n->line.len >= 5 && !memcmp(n->line.data, "data:", 5)) {
         size_t start = 5;
         if (start < n->line.len && n->line.data[start] == ' ')
@@ -124,13 +124,16 @@ static size_t received(char *data, size_t size, size_t count, void *opaque)
     return len;
 }
 static void net_run(Net *n, const char *url, const char *body, const char *content_type,
-                    const char *bearer)
+                    struct curl_slist *headers)
 {
+    n->headers = headers;
     if (n->stream)
         n->output = json_array();
     n->easy = curl_easy_init();
     if (!n->easy) {
         n->result = CURLE_FAILED_INIT;
+        curl_slist_free_all(n->headers);
+        n->headers = NULL;
         return;
     }
     curl_easy_setopt(n->easy, CURLOPT_URL, url);
@@ -151,11 +154,6 @@ static void net_run(Net *n, const char *url, const char *body, const char *conte
     }
     if (content_type) {
         char *h = fmt("Content-Type: %s", content_type);
-        n->headers = curl_slist_append(n->headers, h);
-        free(h);
-    }
-    if (bearer) {
-        char *h = fmt("Authorization: Bearer %s", bearer);
         n->headers = curl_slist_append(n->headers, h);
         free(h);
     }
@@ -196,14 +194,14 @@ static void net_free(Net *n)
     json_decref(n->response);
     json_decref(n->output);
 }
-json_t *http_json(const char *url, const char *body, const char *content_type, const char *bearer,
-                  long *status)
+json_t *http_json_headers(const char *url, const char *body, const char *content_type,
+                          struct curl_slist *headers, long *status)
 {
     char previous[sizeof(app.activity)];
     memcpy(previous, app.activity, sizeof(previous));
     ui_activity("network");
     Net n = {0};
-    net_run(&n, url, body, content_type, bearer);
+    net_run(&n, url, body, content_type, headers);
     if (status)
         *status = n.status;
     json_error_t error;
@@ -219,6 +217,31 @@ json_t *http_json(const char *url, const char *body, const char *content_type, c
     ui_activity("%s", previous);
     return o;
 }
+static struct curl_slist *bearer_header(const char *token)
+{
+    if (!token)
+        return NULL;
+    char *header = fmt("Authorization: Bearer %s", token);
+    struct curl_slist *headers = curl_slist_append(NULL, header);
+    free(header);
+    return headers;
+}
+struct curl_slist *bearer_headers(void)
+{
+    return bearer_header(jstr(app.credentials, "access_token"));
+}
+json_t *http_json(const char *url, const char *body, const char *content_type,
+                  const char *bearer, long *status)
+{
+    return http_json_headers(url, body, content_type, bearer_header(bearer), status);
+}
+json_t *responses_models(long *status)
+{
+    char *url = fmt("%s/models", app.api_base);
+    json_t *catalog = http_json_headers(url, NULL, NULL, app.connection->provider->headers(), status);
+    free(url);
+    return catalog;
+}
 static const char *api_error(json_t *o)
 {
     json_t *e = json_object_get(o, "error");
@@ -228,6 +251,32 @@ static const char *api_error(json_t *o)
     if (!s)
         s = jstr(o, "detail");
     return s ? s : "Request did not complete";
+}
+static char *redacted_error(const char *text)
+{
+    char *result = xstrdup(text);
+    const char *fields[] = {"access_token", "refresh_token", "id_token", "api_key"};
+    for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+        const char *secret = jstr(app.credentials, fields[i]);
+        if (!secret || !*secret)
+            continue;
+        Buf safe = {0};
+        const char *p = result, *match;
+        size_t len = strlen(secret);
+        while ((match = strstr(p, secret))) {
+            buf_add(&safe, p, (size_t)(match - p));
+            buf_puts(&safe, "[redacted]");
+            p = match + len;
+        }
+        buf_puts(&safe, p);
+        free(result);
+        result = safe.data ? safe.data : xstrdup("");
+    }
+    return result;
+}
+json_t *responses_encode(json_t *payload)
+{
+    return json_deep_copy(payload);
 }
 json_t *model_request(json_t *payload)
 {
@@ -255,12 +304,17 @@ json_t *model_request(json_t *payload)
         json_decref(delivery);
         app.pending_delivery = 0;
     }
-    char *body = json_dumps(payload, JSON_COMPACT), *url = fmt("%s/responses", app.api_base);
+    json_t *wire = app.connection->provider->encode(payload);
+    if (!wire)
+        return NULL;
+    char *body = json_dumps(wire, JSON_COMPACT);
+    json_decref(wire);
+    char *url = fmt("%s%s", app.api_base, app.connection->provider->request_path);
     json_t *result = NULL;
     for (int attempt = 1; attempt <= MAX_ATTEMPTS && !app.cancel && !app.quit; attempt++) {
         ui_activity("%s", app.compacting ? "compact" : "model");
         Net n = {.stream = 1};
-        net_run(&n, url, body, "application/json", jstr(app.credentials, "access_token"));
+        net_run(&n, url, body, "application/json", app.connection->provider->headers());
         if (n.text.len && !app.compacting) {
             if (!app.tty)
                 ui_write("\n", 1);
@@ -287,27 +341,25 @@ json_t *model_request(json_t *payload)
         if (code &&
             (!strcmp(code, "context_length_exceeded") || !strcmp(code, "context_window_exceeded")))
             app.context_exceeded = 1;
-        int refresh = !*app.connection->key_env && n.status == 401 && attempt < MAX_ATTEMPTS;
+        int refresh = app.connection->provider->refresh && n.status == 401 && attempt < MAX_ATTEMPTS;
         int temporary = n.result == CURLE_COULDNT_CONNECT ||
                         n.result == CURLE_COULDNT_RESOLVE_HOST ||
                         n.result == CURLE_OPERATION_TIMEDOUT || n.result == CURLE_RECV_ERROR ||
                         n.result == CURLE_PARTIAL_FILE || n.status >= 500 || n.status == 429 ||
                         (!n.response && !n.malformed && n.status == 200);
-        if (code && (!strcmp(code, "subscription_sharing_usage_unavailable") ||
-                     !strcmp(code, "subscription_sharing_user_unavailable")))
-            temporary = 1;
-        if (code && (!strcmp(code, "subscription_sharing_usage_limit_exceeded") ||
-                     !strcmp(code, "subscription_sharing_user_not_eligible")))
-            temporary = 0;
-        message("%s%s%s", n.result ? "Connection failed: " : "Model: ",
-                n.result ? (n.error[0] ? n.error : curl_easy_strerror(n.result))
-                         : api_error(failure),
+        int classification = app.connection->provider->classify
+                                 ? app.connection->provider->classify(n.status, code) : 0;
+        if (classification)
+            temporary = classification > 0;
+        char *diagnostic = redacted_error(n.result ? (n.error[0] ? n.error : curl_easy_strerror(n.result))
+                                                   : api_error(failure));
+        message("%s%s%s", n.result ? "Connection failed: " : "Model: ", diagnostic,
                 n.malformed ? " (invalid stream)" : "");
         json_t *event = json_pack("{s:i,s:i,s:s}", "attempt", attempt, "http_status", (int)n.status,
                                   "code", code ? code : "transport_or_stream");
         json_object_set_new(event, "curl_code", json_integer(n.result));
-        json_object_set_new(event, "message", json_string(
-            n.result ? (n.error[0] ? n.error : curl_easy_strerror(n.result)) : api_error(failure)));
+        json_object_set_new(event, "message", json_string(diagnostic));
+        free(diagnostic);
         json_object_set_new(event, "invalid_stream", json_boolean(n.malformed));
         json_object_set_new(event, "response_status", status ? json_string(status) : json_null());
         journal("request_error", event);

@@ -5,7 +5,7 @@
 
 const Connection *connection_at(size_t index)
 {
-    return index < sizeof(connections) / sizeof(connections[0]) ? &connections[index] : NULL;
+    return index + 1 < sizeof(connections) / sizeof(connections[0]) ? &connections[index] : NULL;
 }
 const Connection *connection_find(const char *name)
 {
@@ -19,7 +19,10 @@ int connection_select(const char *name)
 {
     const Connection *next = connection_find(name);
     if (!next) {
-        message("Provider %s is not configured. Add it to config.h and rebuild.", name);
+        if (name && *name)
+            message("Provider %s is not configured. Install its patch and add it to config.h.", name);
+        else
+            message("No provider configured. Apply a provider patch and configure config.h.");
         return 0;
     }
     if (next == app.connection)
@@ -28,6 +31,7 @@ int connection_select(const char *name)
         app.connection_models = json_object();
     if (app.connection && app.model)
         json_object_set_new(app.connection_models, app.connection->name, json_string(app.model));
+    auth_release();
     app.connection = next;
     app.connection_start = json_array_size(app.items);
     const char *model = jstr(app.connection_models, next->name);
@@ -36,12 +40,6 @@ int connection_select(const char *name)
     free(app.api_base);
     const char *base = getenv("HARN_API_BASE");
     app.api_base = xstrdup(base ? base : next->api_base);
-    json_decref(app.credentials);
-    app.credentials = NULL;
-    json_decref(app.registration);
-    app.registration = NULL;
-    json_decref(app.discovery);
-    app.discovery = NULL;
     json_decref(app.models);
     app.models = NULL;
     json_decref(app.last_usage);
@@ -56,13 +54,9 @@ int connection_restore(json_t *data)
     const char *name = jstr(data, "provider");
     if (!name) {
         /* Journals before named connections saved either endpoint identity or only a model. */
-        const char *base = jstr(data, "api_base"), *key = jstr(data, "api_key_env");
         const Connection *c;
         for (size_t i = 0; (c = connection_at(i)); i++) {
-            const char *override = getenv("HARN_API_BASE");
-            if ((!base && !*c->key_env) ||
-                (base && key && !strcmp(key, c->key_env) &&
-                 (!strcmp(base, c->api_base) || (override && !strcmp(base, override))))) {
+            if (c->provider->legacy && c->provider->legacy(data, c)) {
                 name = c->name;
                 break;
             }
@@ -81,6 +75,13 @@ int connection_restore(json_t *data)
     }
     return 1;
 }
+void provider_version(void)
+{
+    printf("harn %s (%s)\n", VERSION, HARN_REVISION);
+    const Connection *c;
+    for (size_t i = 0; (c = connection_at(i)); i++)
+        printf("%s: %s@%s\n", c->name, c->provider->id, c->provider->revision);
+}
 void connection_command(const char *name)
 {
     while (*name == ' ')
@@ -93,7 +94,7 @@ void connection_command(const char *name)
                 const char *key = getenv(c->key_env);
                 ui_print("  %s (%s %s)", c->name, c->key_env, key && *key ? "set" : "missing");
             } else
-                ui_print("  %s (ChatGPT sign-in)", c->name);
+                ui_print("  %s (%s)", c->name, c->provider->auth_label);
         }
         return;
     }

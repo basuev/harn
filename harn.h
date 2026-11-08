@@ -1,13 +1,6 @@
 #ifndef HARN_H
 #define HARN_H
 #define _POSIX_C_SOURCE 200809L
-typedef struct {
-    const char *name, *api_base, *key_env, *model;
-} Connection;
-#ifndef HARN_CONFIG
-#define HARN_CONFIG "config.h"
-#endif
-#include HARN_CONFIG
 #include "vendor/linenoise/linenoise.h"
 #include <curl/curl.h>
 #include <jansson.h>
@@ -15,6 +8,38 @@ typedef struct {
 #include <stdio.h>
 #include <sys/types.h>
 #include <termios.h>
+
+typedef struct Net Net;
+typedef struct Connection Connection;
+typedef struct Provider Provider;
+struct Provider {
+    const char *id, *revision, *auth_label, *request_path;
+    int (*ready)(int);
+    int (*logout)(void);
+    int (*refresh)(int);
+    json_t *(*models)(long *);
+    json_t *(*catalog)(json_t *);
+    struct curl_slist *(*headers)(void);
+    json_t *(*encode)(json_t *);
+    void (*event)(Net *);
+    /* -1 is terminal, 0 uses the common policy, 1 is retryable. */
+    int (*classify)(long, const char *);
+    int (*legacy)(json_t *, const Connection *);
+    int (*pollfds)(struct curl_waitfd *);
+    void (*tick)(void);
+    void (*close)(void);
+};
+struct Connection {
+    const char *name, *api_base, *key_env, *model;
+    const Provider *provider;
+};
+#ifndef HARN_CONFIG
+#define HARN_CONFIG "config.h"
+#endif
+#include HARN_CONFIG
+#ifndef HARN_REVISION
+#define HARN_REVISION "unknown"
+#endif
 
 typedef struct {
     char *data;
@@ -29,7 +54,7 @@ struct Job {
     Buf display;
     Job *next;
 };
-typedef struct {
+struct Net {
     CURL *easy;
     struct curl_slist *headers;
     Buf body, line, data, text;
@@ -39,15 +64,16 @@ typedef struct {
     long status;
     int done, stream, malformed, message_started, message_phase;
     char error[CURL_ERROR_SIZE];
-} Net;
+};
 typedef struct {
     char *root, *config_dir, *state_dir, *session_dir, *session_id, *model, *effort;
     const char *effort_override;
     const Connection *connection;
-    char *api_base, *issuer, *instructions;
+    char *api_base, *instructions;
+    void *provider_state;
     json_t *connection_models, *efforts;
     size_t connection_start;
-    json_t *items, *requests, *cycles, *credentials, *registration, *discovery, *past_jobs;
+    json_t *items, *requests, *cycles, *credentials, *past_jobs;
     json_t *last_usage, *models, *model_info;
     json_t *skills, *active_skills;
     json_t *instruction_dirs, *instruction_sources, *delivered_instructions;
@@ -149,11 +175,22 @@ void skills_preserve(size_t);
 void skills_command(void);
 
 json_t *http_json(const char *, const char *, const char *, const char *, long *);
+json_t *http_json_headers(const char *, const char *, const char *, struct curl_slist *, long *);
+struct curl_slist *bearer_headers(void);
+json_t *responses_models(long *);
 json_t *model_request(json_t *);
 int auth_ready(int);
-int auth_login(void);
 int auth_refresh(int);
 int auth_logout(void);
+void auth_release(void);
+int api_key_ready(int);
+int api_key_logout(void);
+int api_key_legacy(json_t *, const Connection *);
+json_t *catalog_models(json_t *);
+json_t *catalog_data(json_t *);
+json_t *responses_encode(json_t *);
+void responses_event(Net *);
+void provider_version(void);
 int models_list(int);
 void models_show(void);
 const Connection *connection_at(size_t);

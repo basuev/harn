@@ -13,7 +13,7 @@ import unittest
 
 import check
 
-MODEL = "deepseek/deepseek-v4.1-flash-abliterated"
+MODEL = "fixture/other-model"
 
 
 class ResponsesChecks(unittest.TestCase):
@@ -29,15 +29,15 @@ class ResponsesChecks(unittest.TestCase):
 
     def setUp(self):
         check.Checks.setUp(self)
-        self.startup_args = ("--provider", "allmodels")
+        self.startup_args = ("--provider", "fixture-key")
         self.server.standard_catalog = True
         self.server.model_id = MODEL
         self.server.mode = "echo"
-        self.env["ALLMODELS_API_KEY"] = "KEY_NEVER_SAVED"
-        self.env["HARN_AUTH_ISSUER"] = "http://127.0.0.1:" + str(self.server.server_port)
-        self.credentials = (self.config / "credentials.json").read_bytes()
+        self.env["HARN_SECOND_KEY"] = "KEY_NEVER_SAVED"
+        self.credentials = b"unrelated credentials"
+        (self.config / "credentials.json").write_bytes(self.credentials)
 
-    def command(self, *args, provider="allmodels"):
+    def command(self, *args, provider="fixture-key"):
         selection = ["--provider", provider] if provider else []
         return subprocess.run([str(check.BINARY), "-C", str(self.project), *selection, *args],
                               env=self.env, input=b"", capture_output=True, timeout=20)
@@ -52,14 +52,14 @@ class ResponsesChecks(unittest.TestCase):
             if path.is_file():
                 self.assertNotIn(b"KEY_NEVER_SAVED", path.read_bytes(), str(path))
 
-    def test_missing_and_empty_key_do_not_use_chatgpt_credentials(self):
+    def test_missing_and_empty_key_do_not_use_fixture_credentials(self):
         for value in (None, ""):
             if value is None:
-                self.env.pop("ALLMODELS_API_KEY", None)
+                self.env.pop("HARN_SECOND_KEY", None)
             else:
-                self.env["ALLMODELS_API_KEY"] = value
+                self.env["HARN_SECOND_KEY"] = value
             result = self.run_batch("NO KEY", expected=1)
-            self.assertIn(b"Set ALLMODELS_API_KEY", result.stderr)
+            self.assertIn(b"Set HARN_SECOND_KEY", result.stderr)
         self.assertEqual(self.server.model_fetches, 0)
         self.assertEqual(self.server.discovery_calls, 0)
         self.assertEqual(self.server.requests, [])
@@ -81,9 +81,9 @@ class ResponsesChecks(unittest.TestCase):
 
     def test_configured_endpoint_is_used_without_fixture_override(self):
         self.env.pop("HARN_API_BASE")
-        self.env.pop("ALLMODELS_API_KEY")
+        self.env.pop("HARN_SECOND_KEY")
         result = self.run_batch("NO OVERRIDE", expected=1)
-        self.assertIn(b"Set ALLMODELS_API_KEY to the API key for http://fixture.invalid/v1", result.stderr)
+        self.assertIn(b"Set HARN_SECOND_KEY to the API key for http://second.fixture.invalid/v1", result.stderr)
         self.assertEqual(self.server.model_fetches, 0)
 
     def test_model_list_uses_ids(self):
@@ -116,7 +116,7 @@ class ResponsesChecks(unittest.TestCase):
         self.run_batch("FIRST")
         session = self.session()
         metadata = json.loads((session / "meta.json").read_text())
-        self.assertEqual(metadata["provider"], "allmodels")
+        self.assertEqual(metadata["provider"], "fixture-key")
         self.assertNotIn("api_key_env", metadata)
         result = self.command("--resume", session.name, "-p", "SECOND", provider=None)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -129,7 +129,7 @@ class ResponsesChecks(unittest.TestCase):
         path = self.session() / "meta.json"
         metadata = json.loads(path.read_text())
         del metadata["provider"]
-        metadata.update(api_base=self.env["HARN_API_BASE"], api_key_env="ALLMODELS_API_KEY")
+        metadata.update(api_base=self.env["HARN_API_BASE"], api_key_env="HARN_SECOND_KEY")
         path.write_text(json.dumps(metadata))
         result = self.command("--resume", self.session().name, "-p", "SECOND", provider=None)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -146,7 +146,7 @@ class ResponsesChecks(unittest.TestCase):
         self.assertIn(b"Provider removed is not configured", result.stderr)
         self.assertEqual(len(self.server.requests), 1)
 
-    def test_login_checks_key_and_logout_does_not_revoke_chatgpt(self):
+    def test_login_checks_key_and_logout_does_not_revoke_fixture(self):
         self.assertEqual(self.command("--login").returncode, 0)
         result = self.command("--logout")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -184,8 +184,7 @@ class SwitchingChecks(unittest.TestCase):
         self.server.mode = "echo"
         self.server.key_model_id = MODEL
         self.server.key_window = 262144
-        self.env["ALLMODELS_API_KEY"] = "KEY_NEVER_SAVED"
-        self.env["HARN_AUTH_ISSUER"] = "http://127.0.0.1:" + str(self.server.server_port)
+        self.env["HARN_SECOND_KEY"] = "KEY_NEVER_SAVED"
 
     def test_effort_is_scoped_to_provider_and_persists_on_resume(self):
         p = check.Process(self, "--effort", "high")
@@ -193,7 +192,7 @@ class SwitchingChecks(unittest.TestCase):
             p.send("CHATGPT")
             p.wait("OK CHATGPT")
             self.server.model_metadata = dict(supported_reasoning_levels=None)
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("KEY DEFAULT")
             p.wait("OK KEY DEFAULT")
@@ -201,16 +200,16 @@ class SwitchingChecks(unittest.TestCase):
             p.send("/effort high")
             p.wait("Unsupported effort")
             self.server.model_metadata = {}
-            p.send("/provider chatgpt")
-            p.wait("Provider: chatgpt")
+            p.send("/provider fixture")
+            p.wait("Provider: fixture")
             p.send("CHATGPT RESTORED")
             p.wait("OK CHATGPT RESTORED")
             self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
         finally:
             p.finish()
-        self.run_batch("RESUMED KEY", "--resume", "--provider", "allmodels")
+        self.run_batch("RESUMED KEY", "--resume", "--provider", "fixture-key")
         self.assertNotIn("reasoning", self.server.requests[-1])
-        self.run_batch("RESUMED CHATGPT", "--resume", "--provider", "chatgpt")
+        self.run_batch("RESUMED CHATGPT", "--resume", "--provider", "fixture")
         self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
 
     def test_one_process_switches_both_authorization_modes_and_resumes_last_selection(self):
@@ -218,19 +217,19 @@ class SwitchingChecks(unittest.TestCase):
         try:
             p.send("FIRST")
             p.wait("OK FIRST")
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("SECOND")
             p.wait("OK SECOND")
-            p.send("/provider chatgpt")
-            p.wait("Provider: chatgpt")
+            p.send("/provider fixture")
+            p.wait("Provider: fixture")
             p.send("THIRD")
             p.wait("OK THIRD")
         finally:
             p.finish()
         self.assertEqual(self.server.auth_headers, ["Bearer NEVER_IN_JOURNAL", "Bearer KEY_NEVER_SAVED", "Bearer NEVER_IN_JOURNAL"])
-        self.assertEqual([r["model"] for r in self.server.requests], ["gpt-6.1-sol", MODEL, "gpt-6.1-sol"])
-        self.assertEqual([r["data"]["provider"] for r in self.records() if r["type"] == "usage"], ["chatgpt", "allmodels", "chatgpt"])
+        self.assertEqual([r["model"] for r in self.server.requests], ["fixture-model", MODEL, "fixture-model"])
+        self.assertEqual([r["data"]["provider"] for r in self.records() if r["type"] == "usage"], ["fixture", "fixture-key", "fixture"])
         users = [i["content"] for i in self.server.requests[-1]["input"] if i.get("role") == "user"]
         self.assertEqual(users, ["FIRST", "SECOND", "THIRD"])
         self.assertEqual(self.saved_requests(), self.server.requests)
@@ -240,7 +239,7 @@ class SwitchingChecks(unittest.TestCase):
     def test_resumes_a_provider_selected_inside_the_process(self):
         p = check.Process(self)
         try:
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("KEY SESSION")
             p.wait("OK KEY SESSION")
@@ -251,14 +250,14 @@ class SwitchingChecks(unittest.TestCase):
         self.assertEqual(self.server.auth_headers[-1], "Bearer KEY_NEVER_SAVED")
 
     def test_discovery_is_local_and_missing_or_unknown_provider_keeps_selection(self):
-        self.env.pop("ALLMODELS_API_KEY")
+        self.env.pop("HARN_SECOND_KEY")
         p = check.Process(self)
         try:
             p.send("/provider")
-            p.wait("ALLMODELS_API_KEY missing")
+            p.wait("HARN_SECOND_KEY missing")
             self.assertEqual(self.server.model_fetches, 0)
-            p.send("/provider allmodels")
-            p.wait("Set ALLMODELS_API_KEY before selecting allmodels")
+            p.send("/provider fixture-key")
+            p.wait("Set HARN_SECOND_KEY before selecting fixture-key")
             p.send("/provider unknown")
             p.wait("Provider unknown is not configured")
             p.send("UNCHANGED")
@@ -275,24 +274,24 @@ class SwitchingChecks(unittest.TestCase):
             p.send("WAIT")
             self.assertTrue(self.server.waiting.wait(5))
             p.send("/provider")
-            p.wait("ALLMODELS_API_KEY set")
-            p.send("/provider allmodels")
+            p.wait("HARN_SECOND_KEY set")
+            p.send("/provider fixture-key")
             p.wait("Interrupt the current turn before changing the provider")
             p.wait("OK WAIT")
         finally:
             p.finish()
-        self.assertEqual(self.server.requests[0]["model"], "gpt-6.1-sol")
+        self.assertEqual(self.server.requests[0]["model"], "fixture-model")
 
     def test_catalog_and_usage_are_not_reused_across_providers_with_the_same_model_id(self):
-        self.server.key_model_id = "gpt-6.1-sol"
+        self.server.key_model_id = "fixture-model"
         p = check.Process(self)
         try:
             p.send("MEASURE")
             p.wait("OK MEASURE")
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
-            p.send("/model gpt-6.1-sol")
-            p.wait("Model: gpt-6.1-sol")
+            p.send("/model fixture-model")
+            p.wait("Model: fixture-model")
             p.send("/context")
             p.wait("Context: unknown (catalog not loaded)")
             self.server.model_status = 503
@@ -307,7 +306,7 @@ class SwitchingChecks(unittest.TestCase):
         self.run_batch("TASK basic")
         old_records = (self.session() / "journal.jsonl").read_bytes()
         self.server.mode = "echo"
-        self.run_batch("TRANSFER", "--resume", self.session().name, "--provider", "allmodels")
+        self.run_batch("TRANSFER", "--resume", self.session().name, "--provider", "fixture-key")
         request = self.server.requests[-1]
         self.assertFalse(any(i.get("type") == "reasoning" for i in request["input"]))
         calls = [i for i in request["input"] if i.get("type") == "function_call"]
@@ -333,7 +332,7 @@ class SwitchingChecks(unittest.TestCase):
             p.send("START JOB")
             p.wait("OK JOB READY")
             self.server.mode = "echo"
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("WITH JOB")
             p.wait("OK WITH JOB")
@@ -351,7 +350,7 @@ class SwitchingChecks(unittest.TestCase):
             for n in range(5):
                 p.send("BEFORE " + str(n))
                 p.wait("OK BEFORE " + str(n))
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("/compact")
             p.wait("Full journal preserved")
@@ -360,7 +359,7 @@ class SwitchingChecks(unittest.TestCase):
         finally:
             p.finish()
         self.assertEqual(self.server.auth_headers[-1], "Bearer KEY_NEVER_SAVED")
-        self.assertTrue(any(r["type"] == "compaction_usage" and r["data"]["provider"] == "allmodels" for r in self.records()))
+        self.assertTrue(any(r["type"] == "compaction_usage" and r["data"]["provider"] == "fixture-key" for r in self.records()))
         self.run_batch("AFTER RESTART", "--resume", self.session().name)
         self.assertTrue(any("Earlier conversation summary" in i.get("content", "") for i in self.server.requests[-1]["input"] if isinstance(i.get("content"), str)))
         self.assertEqual(self.saved_requests(), self.server.requests)
@@ -368,29 +367,29 @@ class SwitchingChecks(unittest.TestCase):
     def test_each_connection_remembers_its_model_in_the_running_process(self):
         p = check.Process(self)
         try:
-            p.send("/model custom-chatgpt")
-            p.wait("Model: custom-chatgpt")
-            p.send("/provider allmodels")
+            p.send("/model custom-fixture")
+            p.wait("Model: custom-fixture")
+            p.send("/provider fixture-key")
             p.wait("Model: " + MODEL)
             p.send("/model custom-key")
             p.wait("Model: custom-key")
             p.buffer = b""
-            p.send("/provider chatgpt")
-            p.wait("Model: custom-chatgpt")
+            p.send("/provider fixture")
+            p.wait("Model: custom-fixture")
             p.buffer = b""
-            p.send("/provider allmodels")
+            p.send("/provider fixture-key")
             p.wait("Model: custom-key")
         finally:
             p.finish()
         self.assertEqual(self.server.requests, [])
 
     def test_resumed_connection_does_not_overwrite_another_connections_default_model(self):
-        self.run_batch("FIRST", "--provider", "allmodels")
+        self.run_batch("FIRST", "--provider", "fixture-key")
         p = check.Process(self, "--resume", self.session().name)
         try:
             p.wait("Model: " + MODEL)
-            p.send("/provider chatgpt")
-            p.wait("Model: gpt-6.1-sol")
+            p.send("/provider fixture")
+            p.wait("Model: fixture-model")
             p.send("RETURN")
             p.wait("OK RETURN")
         finally:
@@ -399,7 +398,7 @@ class SwitchingChecks(unittest.TestCase):
 
     def test_removed_earlier_connection_does_not_block_the_current_one(self):
         self.run_batch("FIRST")
-        self.run_batch("SECOND", "--resume", self.session().name, "--provider", "allmodels")
+        self.run_batch("SECOND", "--resume", self.session().name, "--provider", "fixture-key")
         path = self.session() / "meta.json"
         metadata = json.loads(path.read_text())
         metadata["provider"] = "removed-earlier-provider"
@@ -407,7 +406,7 @@ class SwitchingChecks(unittest.TestCase):
         self.run_batch("RESTART", "--resume", self.session().name)
         self.assertEqual(self.server.auth_headers[-1], "Bearer KEY_NEVER_SAVED")
 
-    def test_legacy_chatgpt_metadata_restores_chatgpt(self):
+    def test_legacy_fixture_metadata_restores_fixture(self):
         self.run_batch("FIRST")
         path = self.session() / "meta.json"
         metadata = json.loads(path.read_text())
@@ -433,10 +432,10 @@ class SwitchingChecks(unittest.TestCase):
                 self.assertIn(needle, data)
             try:
                 wait_for(b"ctx:")
-                os.write(master, b"/provider a\t\r")
-                wait_for(b"Provider: allmodels")
-                os.write(master, b"/provider c\t\r")
-                wait_for(b"Provider: chatgpt")
+                os.write(master, b"/provider fixture-k\t\r")
+                wait_for(b"Provider: fixture-key")
+                os.write(master, b"/provider fixture\t\r")
+                wait_for(b"Provider: fixture")
                 os.write(master, b"/quit\r")
                 self.assertEqual(process.wait(timeout=5), 0)
                 self.assertEqual(self.server.model_fetches, 0)
@@ -445,7 +444,7 @@ class SwitchingChecks(unittest.TestCase):
                            key=lambda p: p.stat().st_mtime_ns)
                 records = [json.loads(line) for line in path.read_text().splitlines()]
                 self.assertEqual([r["data"]["provider"] for r in records if r["type"] == "provider"],
-                                 ["allmodels", "chatgpt"])
+                                 ["fixture-key", "fixture"])
             finally:
                 if process.poll() is None:
                     process.terminate()

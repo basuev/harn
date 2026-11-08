@@ -7,61 +7,53 @@ and files as the extension interface.
 
 ## Build
 
-Requires a C11 compiler (GCC or Clang), make, pkg-config, CMake, and development
-headers for libcurl with asynchronous DNS, Jansson, OpenSSL 3, libyaml, and MD4C.
-LibJWT and linenoise are vendored.
-
-From the source directory:
+Requires a C11 compiler, make, pkg-config, and development headers for libcurl
+with asynchronous DNS, Jansson, libyaml, and MD4C. Provider patches may add
+explicit dependencies.
 
 ```sh
 make
 make install PREFIX="$HOME/.local"
 ```
 
-Put `~/.local/bin` on `PATH`.
+The first build copies `config.def.h` to untracked `config.h`. The core has no
+built-in service connections. Install a [provider patch](docs/PROVIDER_PATCHES.md)
+and add its connection to `config.h` before starting a conversation. API key
+values belong in environment variables, not source files.
 
 ## Run
 
-Run from your project directory. The default connection uses
-[ChatGPT sign-in](https://developers.openai.com/siwc/token-sharing-open-source),
-which is in preview and requires eligible subscription access.
+Put `~/.local/bin` on `PATH`. Select a connection registered in your local build:
 
 ```sh
-harn --login
-harn
+harn --provider my-provider
 ```
 
-Resume the most recently active session for that directory:
+Subscription adapters document their sign-in command. `harn --help` lists
+startup options. `/help` lists conversation commands. `harn --version` identifies
+the core revision and configured adapter revisions.
+
+Resume the most recently active session for the current directory:
 
 ```sh
 harn --resume
 ```
 
-Inside a running instance, `/resume` opens suggestions for previous sessions in
-that project, most recently active first, with the first request as a preview.
-Select with arrows or Ctrl-N/P and press Enter. Switching stops the previous
-session's owned processes, just like exiting it. A failed switch leaves the
-current session and its processes intact.
+Inside a running instance, `/resume` offers previous sessions in that project,
+most recently active first, with the first request as a preview. Select with
+arrows or Ctrl-N/P and press Enter. Switching stops the previous session's
+owned processes. A failed switch leaves the current session and processes intact.
 
-`harn --help` lists startup options. `/help` lists conversation commands.
+`/provider` switches configured connections without restarting. `/model` selects
+a model and `/effort` offers its advertised reasoning levels. `default` leaves
+effort to the service. Explicit choices are remembered per connection and model,
+including on resume. Unsupported choices fail without silent substitution.
 
-## Configuration
+## Local configuration
 
-The first build copies `config.def.h` to your untracked `config.h`. Edit the local
-file for connections and defaults, then rebuild. API keys belong in the named
-environment variables, never in the source. Only ChatGPT sign-in is configured
-in the public defaults. To add a Responses endpoint, add a connection with its
-base URL, key environment variable and model ID to the local connection array.
-
-`make release` always builds from `config.def.h`, independently of personal
-settings. Release sources do not contain your local `config.h`.
-
-`/effort` loads the selected provider's model catalog and lists its advertised
-reasoning levels. Without capability metadata only `default` is offered, which
-omits `reasoning.effort`. Explicit choices are remembered per provider and model
-within the session, including on resume. Switching to a model without a saved
-choice uses `default`. Unsupported explicit choices fail without an inference
-request or a silent fallback.
+`config.h` and applied adapters under `providers/` are local and ignored by Git.
+The public patch catalog lives in `patches/providers/`. Standard releases export
+committed, unpatched sources rather than the personal working tree.
 
 - Personal instructions: `~/.config/harn/AGENTS.md`.
 - Directory instructions: `AGENTS.md` in the project, its parents, and visited subdirectories.
@@ -72,22 +64,23 @@ Project skills override personal skills. At either level, `.harn` overrides
 `.agents`. Configuration and session storage respect `XDG_CONFIG_HOME` and
 `XDG_STATE_HOME`, respectively.
 
-See [DESIGN.md](DESIGN.md) for scope and architectural decisions.
+See [DESIGN.md](DESIGN.md) for architectural decisions and
+[provider patches](docs/PROVIDER_PATCHES.md) for the adapter contract and installation.
 
 ## Checks
 
-The local fixture tests require Python 3 and make no model requests to external
-services:
+Local fixture checks use no external services or real credentials:
 
 ```sh
 make check
 ```
 
-`make check-release` requires Python 3.12 or newer and checks a fresh build,
-the fixture tests, and installation from the release archive in an isolated
-environment.
-`make check-terminal` additionally requires Xvfb, xauth, st, Vim, and `computer-use`.
+This checks the core and every installed adapter. `make check-patches` additionally
+applies the published patches to their pinned core revision and checks isolated
+and combined installations. `make check-release` verifies a clean release archive,
+source build and installation. Release checks require Python 3.12 or newer.
+`make check-terminal` additionally requires Xvfb, xauth, st, Vim and `computer-use`.
 
 ## License
 
-[ISC](LICENSE). Third-party licenses are included in `vendor/`.
+[ISC](LICENSE). Installed adapters carry their own additional dependency licenses.
