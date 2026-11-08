@@ -351,6 +351,8 @@ json_t *model_request(json_t *payload)
                                  ? app.connection->provider->classify(n.status, code) : 0;
         if (classification)
             temporary = classification > 0;
+        if (classification < 0)
+            refresh = 0;
         char *diagnostic = redacted_error(n.result ? (n.error[0] ? n.error : curl_easy_strerror(n.result))
                                                    : api_error(failure));
         message("%s%s%s", n.result ? "Connection failed: " : "Model: ", diagnostic,
