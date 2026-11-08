@@ -17,7 +17,7 @@ make install PREFIX="$HOME/.local"
 ```
 
 The first build copies `config.def.h` to untracked `config.h`. The core has no
-built-in service connections. Install a [provider patch](docs/PROVIDER_PATCHES.md)
+built-in service connections. Install a [provider patch](docs/provider-patches.md)
 and add its connection to `config.h` before starting a conversation. API key
 values belong in environment variables, not source files.
 
@@ -65,7 +65,7 @@ Project skills override personal skills. At either level, `.harn` overrides
 `XDG_STATE_HOME`, respectively.
 
 See [DESIGN.md](DESIGN.md) for architectural decisions and
-[provider patches](docs/PROVIDER_PATCHES.md) for the adapter contract and installation.
+[provider patches](docs/provider-patches.md) for the adapter contract and installation.
 
 ## Checks
 

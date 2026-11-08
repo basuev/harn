@@ -24,7 +24,9 @@ connection.
 Validation stays in local Makefile targets. Hosted CI is deliberately omitted.
 
 `README.md` and `DESIGN.md` are the root documentation entry points. Detailed
-contracts and integration references belong in `docs/`.
+contracts and integration references belong in `docs/`, using `lower-kebab-case.md`
+filenames. Keep conventional `README.md` entry points in self-contained directories
+and tool-required names such as `AGENTS.md` and `SKILL.md`.
 
 The version remains 0.1.0 until the first published release. Local rebuilds and
 interface changes alone do not require a version increase.
@@ -204,7 +206,7 @@ extension boundary. They are not a shipped routing layer or a runtime dependency
 
 ## Provider patch contract
 
-The [provider patch contract](docs/PROVIDER_PATCHES.md) defines the adapter boundary,
+The [provider patch contract](docs/provider-patches.md) defines the adapter boundary,
 source-level interfaces, acceptance tests and installation. Patches are pinned to
 an exact core commit rather than a stable plugin ABI. Keeping ordinary adapters
 in disjoint directories lets them compose without editing shared source files.

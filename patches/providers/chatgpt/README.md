@@ -56,4 +56,4 @@ python3 providers/chatgpt/check.py
 This builds and installs a fixture configuration in `.build/`, then tests the
 installed binary against local HTTP/PTY fixtures. It does not use your account
 or call the real service. Live service verification has not been performed for
-this extraction. See [the shared contract](../../../docs/PROVIDER_PATCHES.md).
+this extraction. See [the shared contract](../../../docs/provider-patches.md).

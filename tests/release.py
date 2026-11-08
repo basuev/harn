@@ -32,7 +32,7 @@ def main():
         binary = (release / "bin/harn").read_bytes()
         for secret in (b"api.allmodels.io", b"api.refuseless.com", b"chatgpt.tokens.use.direct"):
             assert secret not in binary
-        assert (source / "docs/PROVIDER_PATCHES.md").is_file()
+        assert (source / "docs/provider-patches.md").is_file()
         assert (release / "licenses/LICENSE").read_bytes() == (source / "LICENSE").read_bytes()
         assert (release / "licenses/LICENSE.linenoise").read_bytes() == (source / "vendor/linenoise/LICENSE").read_bytes()
 
