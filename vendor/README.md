@@ -11,7 +11,9 @@ suggestions replace upstream Tab previews. Their temporary rows participate in
 multiline cleanup and cursor geometry, including the overflow range/count footer
 or inline count when only one row fits, with locally frozen candidates, arrow or
 Ctrl-N/Ctrl-P selection, Tab insertion, and Escape dismissal. Ctrl-N/Ctrl-P keep
-history navigation when suggestions are not visible. Alt-Backspace recognizes
+history navigation when suggestions are not visible. Word movement recognizes
+Alt-B/F and modified Left/Right sequences for Alt, Ctrl and Meta, using UTF-8
+and fold-aware character steps. Alt-Backspace recognizes
 ESC DEL and ESC Ctrl-H, reusing UTF-8 and fold-aware previous-word deletion even
 when the escape and backspace arrive in separate reads. Enter accepts the selection and
 opens argument suggestions with a trailing space when available, otherwise it

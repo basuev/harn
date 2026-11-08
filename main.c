@@ -80,11 +80,11 @@ void pump(int timeout)
         ssize_t len = read(app.signal_pipe[0], signals, sizeof(signals));
         for (ssize_t i = 0; i < len; i++) {
             if (signals[i] == SIGINT) {
-                if (app.busy) {
+                if (app.input_active && app.input.len) {
+                    linenoiseEditReplace(&app.input, "", 0);
+                } else if (app.busy) {
                     app.cancel = 1;
                     ui_status();
-                } else if (app.input_active) {
-                    linenoiseEditReplace(&app.input, "", 0);
                 }
             } else if (signals[i] == SIGTSTP) {
                 ui_suspend(!suspend_sender || suspend_sender == app.editor_pid);

@@ -1650,6 +1650,31 @@ class Checks(unittest.TestCase):
         finally:
             p.finish()
 
+    def test_new_session_stops_old_jobs_and_resets_conversation(self):
+        self.server.mode = "jobs"
+        p = Process(self)
+        try:
+            p.wait("New session:")
+            original = p.buffer.split(b"New session: ", 1)[1].splitlines()[0].decode()
+            p.send("TASK jobs")
+            p.wait("SERVER READY")
+            self.wait_path("port")
+            p.send("/new")
+            p.send("/context")
+            p.wait("Session:")
+            active = p.buffer.rsplit(b"New session: ", 1)[1].splitlines()[0].decode()
+            self.assertNotEqual(active, original)
+            self.session = lambda: self.path / "state/harn/sessions" / active
+            self.assert_server_stopped()
+            self.server.mode = "echo"
+            p.send("FRESH AFTER JOBS")
+            p.wait("OK FRESH AFTER JOBS")
+            self.assertEqual([item["content"] for item in self.server.requests[-1]["input"]
+                              if item.get("role") == "user"], ["FRESH AFTER JOBS"])
+            self.assertTrue((self.path / "state/harn/sessions" / original / "journal.jsonl").exists())
+        finally:
+            p.finish()
+
     def test_in_instance_resume_locked_target_preserves_current_session(self):
         self.server.mode = "echo"
         self.run_batch("LOCKED HISTORY")
@@ -1683,7 +1708,7 @@ class Checks(unittest.TestCase):
             p.send("/help")
             p.wait("Ctrl-C: interrupt.")
             commands = set(line.split()[0].decode() for line in p.buffer.splitlines() if line.startswith(b"/"))
-            self.assertEqual(commands, {"/jobs", "/context", "/provider", "/model", "/effort", "/resume", "/skill", "/compact", "/quit", "/help"})
+            self.assertEqual(commands, {"/jobs", "/context", "/provider", "/model", "/effort", "/new", "/resume", "/skill", "/compact", "/quit", "/help"})
             removed = ["/continue", "/models", "/skills", "/sessions", "/login", "/logout",
                        "/context raw", "/context summary", "/context 2"]
             for command in removed:

@@ -7,6 +7,7 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import subprocess
 import termios
@@ -307,6 +308,57 @@ class Presentation(unittest.TestCase):
         self.read_until(lambda: b"Context:" in self.output[mark:])
         self.assertEqual(self.case.server.requests, [])
 
+    def test_word_navigation_with_utf8_and_split_sequences(self):
+        self.case.server.mode = "echo"
+        self.start(width=42)
+        for left, right in [("\x1bb", "\x1bf"), ("\x1b[1;3D", "\x1b[1;3C"),
+                            ("\x1b[1;5D", "\x1b[1;5C"), ("\x1b[1;9D", "\x1b[1;9C")]:
+            with self.subTest(left=repr(left)):
+                prefix = "case" + str(len(self.case.server.requests))
+                self.send(prefix + " Привет tail")
+                # Feed each byte separately, including the Escape prefix.
+                for key in left:
+                    self.send(key)
+                    time.sleep(.02)
+                self.send("NEW ")
+                self.send(right + "!\r")
+                expected = prefix + " Привет NEW tail!"
+                self.wait_answer("OK " + expected)
+                self.assertEqual(self.case.server.requests[-1]["input"][-1]["content"], expected)
+        self.send("alpha Привет tail\x1bb\x1bb[\x1bf]\r")
+        self.wait_answer("OK alpha [Привет] tail")
+        self.send("\x1bbfirst\x01\x1bf!\x1bf\x1bf?\r")
+        self.wait_answer("OK first!?")
+
+    def test_new_session_from_completion_keeps_settings_and_can_resume(self):
+        self.case.server.mode = "echo"
+        self.case.server.ui_stream = False
+        self.start(width=42)
+        self.send("ORIGINAL\r")
+        self.wait_answer("OK ORIGINAL")
+        original = self.case.session().name
+        mark = len(self.output)
+        self.send("/ne\r")
+        self.read_until(lambda: re.search(rb"New session: ([\w-]+)\r\n", self.output[mark:]))
+        active = re.search(rb"New session: ([\w-]+)\r\n", self.output[mark:]).group(1).decode()
+        self.assertNotEqual(active, original)
+        self.case.session = lambda: self.case.path / "state/harn/sessions" / active
+        self.assertEqual(len(self.case.server.requests), 1)
+        self.assertIsNone(self.process.poll())
+        self.send("FRESH\r")
+        self.wait_answer("OK FRESH")
+        request = self.case.server.requests[-1]
+        self.assertEqual([item["content"] for item in request["input"]
+                          if item.get("role") == "user"], ["FRESH"])
+        self.assertEqual(request["reasoning"], dict(effort="medium"))
+        self.send("/resume " + original + "\r")
+        self.read_until(lambda: ("Resumed session: " + original).encode() in self.output)
+        self.case.session = lambda: self.case.path / "state/harn/sessions" / original
+        self.send("CONTINUED\r")
+        self.wait_answer("OK CONTINUED")
+        self.assertEqual([item["content"] for item in self.case.server.requests[-1]["input"]
+                          if item.get("role") == "user"], ["ORIGINAL", "CONTINUED"])
+
     def test_alt_backspace_deletes_utf8_word_with_split_escape(self):
         self.case.server.mode = "echo"
         self.start(width=42)
@@ -373,9 +425,9 @@ class Presentation(unittest.TestCase):
     def test_suggestion_range_shows_hidden_items_and_tracks_scroll_and_wrap(self):
         self.start(width=42)
         self.send("/")
-        self.read_until(lambda: b"1-5 of 10" in self.output)
-        for key, position in [("\x10", b"6-10 of 10"), ("\x10", b"5-9 of 10"),
-                              ("\x0e", b"6-10 of 10"), ("\x0e", b"1-5 of 10")]:
+        self.read_until(lambda: b"1-5 of 11" in self.output)
+        for key, position in [("\x10", b"7-11 of 11"), ("\x10", b"6-10 of 11"),
+                              ("\x0e", b"7-11 of 11"), ("\x0e", b"1-5 of 11")]:
             mark = len(self.output)
             self.send(key)
             self.read_until(lambda: position in self.output[mark:])
@@ -387,17 +439,17 @@ class Presentation(unittest.TestCase):
         width = max(42, len(str(self.case.project).encode()) + 1)
         self.start(width=width, height=7)
         self.send("/")
-        self.read_until(lambda: b"1-1 of 10" in self.output)
+        self.read_until(lambda: b"1-1 of 11" in self.output)
         self.assertIn(b"\x1b[7m/compact", self.output)
         mark = len(self.output)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 6, width, 0, 0))
         self.send("\x0e")
-        self.read_until(lambda: b"2/10" in self.output[mark:])
+        self.read_until(lambda: b"2/11" in self.output[mark:])
         self.assertIn(b"\x1b[7m/context", self.output[mark:])
         mark = len(self.output)
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 36, 80, 0, 0))
         self.send("\x10")
-        self.read_until(lambda: b"1-5 of 10" in self.output[mark:]
+        self.read_until(lambda: b"1-5 of 11" in self.output[mark:]
                         and b"\x1b[7m/compact" in self.output[mark:])
         self.assertNotRegex(self.output, rb"\x1b\[-[0-9]+A")
         self.assertEqual(self.case.server.requests, [])
@@ -439,6 +491,34 @@ class Presentation(unittest.TestCase):
         self.assertNotIn(b"Unknown command", self.output[mark:])
         self.assertEqual(len(self.case.server.requests), 1)
         self.assertNotRegex(self.output, rb"\x1b\[-[0-9]+A")
+
+    def test_ctrl_c_clears_draft_before_interrupting_active_work(self):
+        self.case.server.tool_plan = [[call("exec", dict(command="touch started; sleep 30"), "wait")]]
+        self.start(width=42)
+        self.send("TASK\r")
+        self.case.wait_path("started")
+        for via_signal in (False, True):
+            with self.subTest(via_signal=via_signal):
+                mark = len(self.output)
+                self.send("discard Привет")
+                self.read_until(lambda: "discard Привет".encode() in self.output[mark:])
+                mark = len(self.output)
+                if via_signal:
+                    os.kill(self.process.pid, signal.SIGINT)
+                else:
+                    self.send("\x03")
+                self.read_until(lambda: b"\r\n> \r\x1b[2C" in self.output[mark:])
+                # A local command round-trip confirms the event loop stayed live.
+                self.send("/context\r")
+                self.read_until(lambda: b"Session:" in self.output[mark:])
+                self.assertNotIn(b"Stopped by you", self.output)
+                self.assertNotIn(b"Stopping...", self.output)
+                self.assertFalse(any(r["type"] == "item" and
+                                     "interrupted" in str(r["data"])
+                                     for r in self.case.records()))
+        self.send("\x03")
+        self.read_until(lambda: b"Stopped by you" in self.output)
+        self.assertEqual(self.output.count(b"Stopped by you"), 1)
 
     def test_stop_is_one_emphasized_event_and_idle_ctrl_c_is_quiet(self):
         self.case.server.tool_plan = [[call("exec", dict(command="touch started; sleep 30"), "wait")]]

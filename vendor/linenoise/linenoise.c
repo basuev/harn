@@ -1530,6 +1530,23 @@ void linenoiseEditMoveRight(struct linenoiseState *l) {
     }
 }
 
+/* Move across whitespace-delimited words without entering UTF-8 characters
+ * or folded paste ranges. */
+static void linenoiseEditMoveWord(struct linenoiseState *l, int right) {
+    if (right) {
+        while (l->pos < l->len && isspace((unsigned char)l->buf[l->pos]))
+            l->pos += linenoiseEditNextLen(l, l->pos);
+        while (l->pos < l->len && !isspace((unsigned char)l->buf[l->pos]))
+            l->pos += linenoiseEditNextLen(l, l->pos);
+    } else {
+        while (l->pos > 0 && isspace((unsigned char)l->buf[l->pos-1]))
+            l->pos -= linenoiseEditPrevLen(l, l->pos);
+        while (l->pos > 0 && !isspace((unsigned char)l->buf[l->pos-1]))
+            l->pos -= linenoiseEditPrevLen(l, l->pos);
+    }
+    refreshLine(l);
+}
+
 /* Move cursor to the start of the line. */
 void linenoiseEditMoveHome(struct linenoiseState *l) {
     if (l->pos != 0) {
@@ -1935,6 +1952,10 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
         if (l->pending_key_len == 1 && c != '[' && c != 'O') {
             l->pending_key_len = 0; /* Preserve the character after a lone ESC. */
             l->completion_escape = 0;
+            if (c == 'b' || c == 'f') { /* Alt-B/F. */
+                linenoiseEditMoveWord(l, c == 'f');
+                return linenoiseEditMore;
+            }
             if (c == BACKSPACE || c == 8) { /* Alt-Backspace (ESC DEL or ESC Ctrl-H). */
                 linenoiseEditDeletePrevWord(l);
                 return linenoiseEditMore;
@@ -2071,6 +2092,12 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
         if (seq[0] == '[' || seq[0] == 'O') {
             if (seq_len == 3 && !memcmp(seq, "[3~", 3)) {
                 linenoiseEditDelete(l);
+            } else if (seq_len == 5 &&
+                       (!memcmp(seq, "[1;3", 4) || !memcmp(seq, "[1;5", 4) ||
+                        !memcmp(seq, "[1;9", 4)) &&
+                       (seq[4] == 'C' || seq[4] == 'D')) {
+                /* Alt, Ctrl and terminals using the Meta modifier. */
+                linenoiseEditMoveWord(l, seq[4] == 'C');
             } else if (seq_len == 5 && !memcmp(seq, "[200~", 5)) {
                 if (linenoiseEditPaste(l) < 0) return NULL;
             } else {

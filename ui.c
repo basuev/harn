@@ -14,7 +14,8 @@ static const struct {
     const char *name, *description;
 } commands[] = {{"/compact", "Compact context"}, {"/context", "Show context"},
                 {"/effort", "Show or change reasoning effort"}, {"/help", "Show commands"}, {"/jobs", "Show local jobs"},
-                {"/model", "List or change model"}, {"/provider", "List or change provider"},
+                {"/model", "List or change model"}, {"/new", "Create a new session"},
+                {"/provider", "List or change provider"},
                 {"/quit", "Save and exit"}, {"/resume", "Choose a previous session"}, {"/skill", "List skills"}};
 static json_t *resume_choices;
 static const char *completion_description(const char *candidate)
@@ -675,6 +676,7 @@ void ui_command(char *line)
                  "/provider [name]  List providers or select one\n"
                  "/model [name]     List models or select one\n"
                  "/effort [level]   Show or change reasoning effort\n"
+                 "/new              Create a new session\n"
                  "/resume [id]      Choose a previous session\n"
                  "/skill            List skills\n"
                  "/compact          Summarize earlier history\n"
@@ -699,6 +701,13 @@ void ui_command(char *line)
     }
     if (!strncmp(line, "/provider", 9) && (line[9] == 0 || line[9] == ' ')) {
         connection_command(line + 9);
+        return;
+    }
+    if (!strcmp(line, "/new")) {
+        if (app.busy || app.queued.len)
+            message("Interrupt the current turn before creating a session");
+        else
+            session_switch(NULL);
         return;
     }
     if (!strncmp(line, "/resume", 7) && (line[7] == 0 || line[7] == ' ')) {
@@ -817,6 +826,10 @@ void ui_input(void)
         }
         if (!line && reason == EINTR) {
             raise(SIGTSTP);
+            return;
+        }
+        if (!line && reason == EAGAIN && app.input.len) {
+            linenoiseEditReplace(&app.input, "", 0);
             return;
         }
         linenoiseHide(&app.input);

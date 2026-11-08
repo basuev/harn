@@ -863,7 +863,7 @@ static void session_dispose(void)
 }
 int session_switch(const char *id)
 {
-    if (app.session_id && !strcmp(id, app.session_id)) {
+    if (id && app.session_id && !strcmp(id, app.session_id)) {
         message("Session is already active");
         return 0;
     }
@@ -871,7 +871,9 @@ int session_switch(const char *id)
     session_exchange(&previous);
     app.connection = previous.connection;
     app.model = xstrdup(previous.model);
-    app.effort = xstrdup("default");
+    app.effort = xstrdup(id ? "default" : previous.effort);
+    if (!id)
+        app.models = json_incref(previous.models);
     app.api_base = xstrdup(previous.api_base);
     app.credentials = json_incref(previous.credentials);
     const char *provider_override = app.connection_override, *effort_override = app.effort_override;
@@ -884,6 +886,8 @@ int session_switch(const char *id)
     app.effort_override = effort_override;
     app.model_override = model_override;
     if (!ok) {
+        if (!id)
+            message("Could not create a new session");
         session_dispose();
         session_exchange(&previous);
         ui_status();
@@ -895,7 +899,7 @@ int session_switch(const char *id)
     session_exchange(&previous);
     app.compact_requested = 0;
     app.exit_status = 0;
-    session_show(1);
+    session_show(id != NULL);
     message("Provider: %s", app.connection->name);
     message("Model: %s", app.model);
     message("Effort: %s", app.effort);

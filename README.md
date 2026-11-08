@@ -44,6 +44,11 @@ most recently active first, with the first request as a preview. Select with
 arrows or Ctrl-N/P and press Enter. Switching stops the previous session's
 owned processes. A failed switch leaves the current session and processes intact.
 
+`/new` starts an empty session without restarting, keeping the selected provider,
+model and effort. The previous conversation remains available through `/resume`.
+Creating a session stops the previous session's owned processes only after the
+new session has opened successfully. Interrupt an active turn before using `/new`.
+
 `/provider` switches configured connections without restarting. `/model` selects
 a model and `/effort` offers its advertised reasoning levels. `default` leaves
 effort to the service. Explicit choices are remembered per connection and model,

@@ -139,6 +139,16 @@ packages.
 
 ## History and context
 
+Ctrl-C prioritizes discarding a nonempty input draft over cancelling active
+work. Only an empty input allows Ctrl-C to interrupt the turn. This priority
+also applies to SIGINT received through the signal pipe.
+
+In-instance creation keeps the current provider, model and selected effort,
+not the original command-line overrides or other models' effort preferences.
+It starts fresh conversation, instruction, skill and usage state. Creation and
+resume use the same ownership exchange so failed creation preserves the old
+conversation and its jobs.
+
 In-instance resume keeps the current session open until the target has loaded
 and acquired its journal lock. Failure must preserve the current conversation
 and owned jobs. Success ends the old session's process ownership before exposing
