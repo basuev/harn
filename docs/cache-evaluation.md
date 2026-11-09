@@ -8,6 +8,9 @@ individual routing observations and aggregate measurements are retained in
 logs are under `.build/cache-evaluation/`. They contain personal instructions and
 are deliberately excluded from the public repository.
 
+The current production scope is documented in [prompt caching](prompt-caching.md).
+The controls below describe the pre-cleanup experimental implementation.
+
 The follow-up [coding workflow evaluation](cache-workflow-evaluation.md) uses
 independently graded code changes and repeated controlled mechanism probes.
 
@@ -45,7 +48,7 @@ changes or first-text/tool latency. No cache accounting was exposed by `/context
 
 ## Matched agent workflow
 
-`tests/cache_live.py` ran six individual file-reading turns followed by six
+The historical `tests/cache_live.py` at commit `8b8e88f` ran six individual file-reading turns followed by six
 short follow-ups. It changed AGENTS.md on turn 8, selected high effort on turn
 10 and restored provider-controlled effort on turn 11. Each build made 18
 inference requests and returned all 12 exact expected answers. Each run used

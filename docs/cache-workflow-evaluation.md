@@ -3,7 +3,8 @@
 Measured on 2026-11-09 with ChatGPT subscription OAuth and `gpt-6.1-sol`.
 Aggregates, individual trials, hashes and limitations are retained in
 [cache-workflow-evaluation.json](cache-workflow-evaluation.json). Private source
-journals and logs remain under `.build/cache-workflow/`.
+journals and logs remain under `.build/cache-workflow/`. These results describe
+the experimental binary before the subsequent production cleanup.
 
 ## Observed outcome
 
@@ -68,12 +69,13 @@ Delta delivery is deferred because its additional semantics have no demonstrated
 end-to-end benefit in this workload. Snapshot growth should be measured on
 ordinary project-rule and catalog changes before changing this contract.
 
-The session cache key remains stable metadata sent by the adapter. Its routing
-or accounting semantics under subscription OAuth are not established by these
-experiments. Shared compaction instructions remain a
-consistent request structure, with no claim of repeatable subscription savings.
-Neither contradictory small probe is sufficient to establish a superior
-production default for keys or compaction.
+After reviewing these results, the user selected a smaller production scope.
+Generated cache keys, explicit TTL and breakpoints, effort-update state, runtime
+prefix fingerprints and the shared compaction prefix were removed. Compaction
+uses dedicated summary instructions without tool definitions. Selected effort
+is sent as an ordinary request field. The API-key adapter remains optional and
+uses the ordinary Responses codec. Prefix inspection is an offline operation.
+See [the current scope](prompt-caching.md).
 
 Users keep the existing workflow: project rules apply automatically, compaction
 preserves continuation, and sessions can be resumed. `/context` exposes reported
@@ -152,9 +154,10 @@ instructions and belong under the ignored `.build/` directory.
 python3 tests/cache_workflow.py ~/.local/bin/harn .build/cache-workflow/run-1
 ```
 
-The earlier read-only workload remains `tests/cache_live.py` to reproduce the
-historical measurements in [cache-evaluation.md](cache-evaluation.md). It is not
-the acceptance workload for this follow-up.
+The earlier read-only workload is retained in commit `8b8e88f` as
+`tests/cache_live.py` for reproducing [historical measurements](cache-evaluation.md).
+It was removed from the current tree. The coding workflow is the retained
+acceptance workload.
 
 ## Controlled mechanism probes
 
@@ -192,3 +195,14 @@ python3 tests/cache_probe.py \
   .build/cache-workflow/run-1/1-persistent/state/harn/sessions/SESSION/journal.jsonl \
   .build/cache-workflow/probes-1
 ```
+
+Offline prefix inspection also accepts journals without policy updates or
+compaction and does not need credentials:
+
+```sh
+python3 tests/cache_probe.py /path/to/journal.jsonl .build/cache-inspection --inspect
+```
+
+Live compaction probes explicitly construct both request variants, regardless of
+which strategy was used by the recorded source binary. Experimental parameters
+in these probes are not production defaults.

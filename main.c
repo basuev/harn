@@ -146,9 +146,14 @@ int compact_context(void)
             "completed changes, exact check outcomes, important paths, errors, unresolved work, "
             "job states and user-requested stops. Distinguish confirmed results from unknown "
             "outcomes. Do not repeat actions or invent results. Return a concise factual note."));
+    const char *instructions =
+        "Summarize the conversation for a coding agent continuing the same task. Preserve the "
+        "user's goal and all constraints, project instructions, completed changes and checks, "
+        "important paths, tool errors, unresolved work, and current job states including "
+        "user-requested stops. Distinguish confirmed results from unknown outcomes. Do not repeat "
+        "actions or invent results. Return a concise factual continuation note.";
     json_t *payload = json_pack("{s:s,s:s,s:o,s:b,s:b}", "model", app.model, "instructions",
-                                app.instructions, "input", input, "store", 0, "stream", 1);
-    json_object_set_new(payload, "tools", tool_schema());
+                                instructions, "input", input, "store", 0, "stream", 1);
     json_object_set_new(payload, "tool_choice", json_string("none"));
     app.compacting = 1;
     json_t *response = model_request(payload);

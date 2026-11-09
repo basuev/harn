@@ -322,7 +322,10 @@ json_t *model_request(json_t *payload)
     ui_activity("%s", app.compacting ? "compact" : "model");
     if (!auth_ready(0))
         return NULL;
-    reasoning_prepare(payload);
+    if (!strcmp(app.effort, "default"))
+        json_object_del(payload, "reasoning");
+    else
+        json_object_set_new(payload, "reasoning", json_pack("{s:s}", "effort", app.effort));
     json_t *wire = app.connection->provider->encode(payload);
     if (!wire)
         return NULL;
@@ -341,7 +344,6 @@ json_t *model_request(json_t *payload)
         json_decref(delivery);
         app.pending_delivery = 0;
     }
-    cache_request(wire);
     char *body = json_dumps(wire, JSON_COMPACT);
     json_decref(wire);
     char *url = fmt("%s%s", app.api_base, app.connection->provider->request_path);

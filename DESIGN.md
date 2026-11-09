@@ -154,9 +154,9 @@ packages.
 
 ## History and context
 
-Prompt-cache reuse is optimized at the adapter boundary and measured per HTTP
-attempt. Live instruction changes append authoritative snapshots instead of
-rewriting the prefix. See [prompt caching](docs/prompt-caching.md) for policy
+Live instruction changes append authoritative snapshots instead of rewriting
+the prefix. Cache usage is measured per HTTP attempt. There is no runtime
+prefix fingerprinting, cache-key generation or catalog-driven cache control. See [prompt caching](docs/prompt-caching.md) for policy
 precedence, capability boundaries, subscription findings and accounting.
 
 Ctrl-C prioritizes discarding a nonempty input draft over cancelling active

@@ -30,7 +30,7 @@ def content(item):
     return value if isinstance(value, str) else "".join(p.get("text", "") for p in value)
 
 
-def wire_requests(journal):
+def wire_requests(journal, provider=None):
     items, requests = [], []
     for line in journal.read_text().splitlines():
         event = json.loads(line)
@@ -38,12 +38,34 @@ def wire_requests(journal):
             items.append(event["data"])
         elif event["type"] == "request":
             data = event["data"]
-            if data.get("provider") != "chatgpt":
+            if provider and data.get("provider") != provider:
                 raise ValueError("Controlled replay currently supports ChatGPT OAuth journals only")
             wire = copy.deepcopy(data["request"])
             wire["input"] = [copy.deepcopy(items[i] if isinstance(i, int) else i) for i in data["selection"]]
             requests.append(wire)
     return requests
+
+
+def prefix_changes(previous, current):
+    fields = sorted((set(previous) | set(current)) - {"input"})
+    before, after = previous.get("input", []), current.get("input", [])
+    shared = 0
+    while shared < min(len(before), len(after)) and before[shared] == after[shared]:
+        shared += 1
+    return dict(changed_fields=[k for k in fields if previous.get(k) != current.get(k)
+                               or (k in previous) != (k in current)],
+                shared_items=shared, previous_items=len(before), current_items=len(after),
+                history_appended=shared == len(before))
+
+
+def summary_variant(ordinary, compact, shared):
+    wire = copy.deepcopy(compact)
+    wire["instructions"] = ordinary["instructions"] if shared else LEGACY_SUMMARY
+    if shared:
+        wire["tools"] = copy.deepcopy(ordinary["tools"])
+    else:
+        wire.pop("tools", None)
+    return wire
 
 def fixed_reply(wire):
     wire = copy.deepcopy(wire)
@@ -153,16 +175,24 @@ def main():
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--factors", nargs="+", choices=("key", "policy", "compaction"), default=["key", "policy", "compaction"])
     parser.add_argument("--timeout", type=float, default=240)
+    parser.add_argument("--inspect", action="store_true", help="Compare recorded wire prefixes offline, without inference")
     parser.add_argument("--endpoint", default="https://api.openai.com/v1/responses")
     parser.add_argument("--credentials", type=Path, default=Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config"))) / "harn/credentials.json")
     args = parser.parse_args()
     if args.repetitions < 1 or args.warmups < 1 or args.timeout <= 0:
         parser.error("Repetitions, warmups and timeout must be positive")
     args.output.mkdir(parents=True)
-    before_policy, after_policy, ordinary, compact = select_sources(wire_requests(args.journal))
+    requests = wire_requests(args.journal, provider=None if args.inspect else "chatgpt")
+    prefixes = [dict(previous_request=i, request=i+1, **prefix_changes(before, after))
+                for i, (before, after) in enumerate(zip(requests, requests[1:]), 1)]
+    if args.inspect:
+        save(args.output / "prefixes.json", prefixes)
+        print(json.dumps(prefixes, indent=2))
+        return
+    before_policy, after_policy, ordinary, compact = select_sources(requests)
     save(args.output / "manifest.json", dict(started_at=datetime.now(timezone.utc).isoformat(),
         source_sha256=hashlib.sha256(args.journal.read_bytes()).hexdigest(), repetitions=args.repetitions,
-        warmups=args.warmups, factors=args.factors, endpoint=args.endpoint,
+        warmups=args.warmups, factors=args.factors, endpoint=args.endpoint, source_prefixes=prefixes,
         controls="Same recorded wire/history, balanced order, no tool execution, cold-inclusive and probe results reported separately."))
     rows = []
     for factor in args.factors:
@@ -176,10 +206,7 @@ def main():
                     if variant == "rewrite":
                         warm, probe = rewrite_policy(warm), rewrite_policy(probe)
                 elif factor == "compaction":
-                    warm, probe = fixed_reply(ordinary), copy.deepcopy(compact)
-                    if variant == "distinct":
-                        probe["instructions"] = LEGACY_SUMMARY
-                        probe.pop("tools", None)
+                    warm, probe = fixed_reply(ordinary), summary_variant(ordinary, compact, variant == "shared")
                 else:
                     warm = probe = fixed_reply(ordinary)
                 for phase_index in range(args.warmups + 1):

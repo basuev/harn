@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+import subprocess
 
 import check
 import cache_probe as probe
@@ -14,6 +15,31 @@ from cache_report import summarize
 
 
 class BenchmarkChecks(unittest.TestCase):
+    def test_prefix_inspection_is_offline_and_works_without_compaction_or_credentials(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            journal = root / "journal.jsonl"
+            item = dict(role="user", content="Question")
+            events = [dict(type="item", data=item),
+                dict(type="request", data=dict(provider="fixture", request=dict(model="one"), selection=[0])),
+                dict(type="request", data=dict(provider="fixture", request=dict(model="two"), selection=[0, dict(role="user", content="Next")]))]
+            journal.write_text("".join(json.dumps(e) + "\n" for e in events))
+            subprocess.run(["python3", str(Path(probe.__file__)), str(journal), str(root/"inspection"),
+                "--inspect", "--credentials", str(root/"missing-credentials.json")], check=True, capture_output=True, timeout=5)
+            result = json.loads((root/"inspection/prefixes.json").read_text())
+            self.assertEqual(result[0]["changed_fields"], ["model"])
+            self.assertEqual(result[0]["shared_items"], 1)
+            self.assertTrue(result[0]["history_appended"])
+
+    def test_summary_controls_are_independent_of_the_recorded_compaction_strategy(self):
+        ordinary = dict(instructions="CODING", tools=[dict(type="function", name="read")])
+        compact = dict(instructions=probe.LEGACY_SUMMARY, input=[dict(role="user", content="History")], tool_choice="none")
+        shared = probe.summary_variant(ordinary, compact, True)
+        self.assertEqual(shared["instructions"], ordinary["instructions"])
+        self.assertEqual(shared["tools"], ordinary["tools"])
+        self.assertEqual(probe.summary_variant(ordinary, shared, False), compact)
+        self.assertNotIn("tools", compact)
+
     def test_streamed_reply_and_mixed_tool_cycle_are_not_final(self):
         item = dict(role="assistant", content=[dict(type="output_text", text="STAGE_DONE")])
         self.assertFalse(workflow.final_response([dict(type="item", data=item)], "STAGE_DONE"))

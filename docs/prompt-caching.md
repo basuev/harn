@@ -1,138 +1,89 @@
 # Prompt caching
 
-The harness should preserve reusable conversation input while continuing to apply
-live project rules. Cache performance is an observed property of a connection,
-model, authorization method and workload. An accepted parameter or a model name
-alone does not establish a cache hit, a latency improvement or subscription savings.
+The production scope is stable instruction delivery and factual cache accounting.
+Live project rules must remain correct through edits, compaction and resume.
+Reuse is an observed property of a provider, model, authorization and workload.
+Accepted parameters alone do not establish faster work or lower consumption.
 
 ## Policy delivery
 
-The stable system instructions define scope and precedence. A developer message
+Stable system instructions define scope and precedence. A developer message
 contains the current AGENTS.md sources and available skill catalog. A later full
-snapshot replaces the earlier source list, including deletions. Changes are
-appended where they take effect instead of rewriting the conversation prefix.
-Compaction pins the latest snapshot if its original item leaves active history.
-Read skill bodies retain their separate exact-snapshot semantics.
+snapshot replaces that source list and catalog, including deletions. Changes
+append where they take effect instead of rewriting the submitted prefix.
 
 Direct writes still compare current applicable sources with those delivered in
-the preceding inference request. Discovering or changing rules during a tool
-cycle does not authorize a prepared write under those new rules.
+the preceding inference request. Changing rules during a tool cycle does not
+authorize a prepared write under the new rules. Already read skill instructions
+retain their exact-snapshot semantics independently of the available catalog.
 
-## Connection capabilities
+## Requests and compaction
 
-Adapters supply optional normalized model metadata:
+Ordinary Responses adapters use `responses_encode`. The core sends the selected
+request-level effort, or omits it for the provider-controlled default. Catalog
+advertisements do not enable cache keys, TTL, breakpoints or configuration-update
+items. The optional OpenAI API adapter also uses ordinary Responses requests.
 
-- `prompt_cache.key`: send a stable session cache key outside prompt content.
-- `prompt_cache.ttl`: enable Responses cache options with this request lifetime.
-- `prompt_cache.static_ttl`: lifetime of the initial developer-prefix breakpoint.
-- `prompt_cache.diagnostics`: compare with the preceding completed response from
-  the same connection and model.
-- `supports_reasoning_effort_updates`: preserve the request-level effort and
-  append `configuration_update` items for explicit effort changes.
+Compaction uses dedicated summary instructions, historical input and
+`tool_choice: "none"`, without tool definitions. Its final user message explicitly
+treats earlier tasks as history. No tools execute during summarization. The latest
+policy snapshot and read skill bodies are preserved outside the summary when
+needed, so continuation does not depend on a lossy note remembering every rule.
+The existing 80% trigger remains unchanged.
 
-These fields are adapter capabilities, not a claim that every compatible endpoint
-implements the same protocol. The core does not infer them from model names.
-Saved capabilities support the existing temporary catalog-outage behavior.
+Earlier experimental effort-update items are ignored on resume. The selected
+effort is restored from its ordinary journal events and sent on each request.
+No experimental state machine is retained for those historical items.
 
-In the [official API guide](https://developers.openai.com/api/docs/guides/prompt-caching#prompt-cache-keys),
-GPT-5.6 and later route caches automatically. Keys separate cache accounting and
-are not required to optimize routing. Subscription OAuth behavior is measured
-separately. Acceptance of a key alone does not prove a routing benefit.
+## Accounting
 
-The optional OpenAI API adapter documents confirmed capabilities for
-`gpt-6.1-sol`. Its request and static lifetimes default to `"30m"`. Personal
-`config.h` may set `OPENAI_PROMPT_CACHE_TTL` and `OPENAI_STATIC_CACHE_TTL` to
-`"30m"` or `"12h"`. Longer retention has a higher write price. There is no
-background prewarming, keep-alive inference or prompt padding.
+`request` events and the latest `request.json` represent encoded wire requests.
+History references avoid duplicating growing conversation input. Each HTTP
+attempt that returns control to the application produces `request_attempt`,
+including retries, cancellation and incomplete streams. It records reported root
+usage, response metadata, available cache diagnostics and the whitelisted
+`x-request-id` header. Timing uses a monotonic clock for duration and the first
+text or tool indication. A streamed tool timestamp does not measure execution.
 
-The API effort setting remains unchanged across explicit updates. Returning to
-`default` starts a new configuration epoch and omits explicit overrides, so the
-service controls its default again. Model changes, connection changes and local
-compaction also start a new epoch. Updates from another connection are never
-forwarded. Portable text compaction does not promise preserved opaque reasoning.
+Successful `usage` events retain full attribution. Attempt records omit its
+nested attribution tree to avoid duplicating it. Root and nested usage are never
+added together. Legacy usage is readable without counting new usage events twice.
 
-## Subscription verification
+`/context` shows the last request and session accounting by provider, model and
+purpose. Missing counters remain unknown. Read percentage divides summed reported
+reads by input from attempts reporting both values. Abrupt process termination
+can leave an open `request` without final outcome or consumption. Completed
+attempt totals do not establish its remote bill or subscription quota impact.
 
-Live checks on 2026-11-09 with ChatGPT subscription OAuth and `gpt-6.1-sol`
-established a narrower protocol than the public API documentation:
-
-- `prompt_cache_key` is accepted.
-- `prompt_cache_options` is rejected as unsupported on this model.
-- `prompt_cache_breakpoint` is rejected as unsupported on this model.
-- `prompt_cache_retention` is rejected as an unsupported parameter.
-- `configuration_update` is rejected with
-  `subscription_sharing_unsupported_capability`, despite the catalog advertising
-  `supports_reasoning_effort_updates: true`.
-
-The subscription adapter therefore uses a stable session key and normal explicit
-effort fields. It overrides the inapplicable API capability advertisement. It
-does not repeatedly discover these restrictions by failing user requests.
-Modern API controls remain available through the separate API-key adapter.
-Local fixtures verify that the two authentication modes receive different fields.
-
-## Compaction
-
-The summary request keeps normal system instructions and tool definitions.
-Its final user message explicitly treats prior requests as history and asks for a
-factual continuation note. `tool_choice: "none"` prevents new tool calls. The
-normal prefix can be reused up to a matching cached boundary. The next inference
-starts from the summary and retained cycles, so a lower cache-read fraction is
-expected. The existing 80% trigger remains unchanged. Evaluate the summary request
-and subsequent work together instead of maximizing cache-read percentage alone.
-
-## Evidence and accounting
-
-The journal's `request` events and `request.json` represent the encoded wire
-request. History references still avoid duplicating growing conversation input.
-`cache_request` contains equality fingerprints and the first differing request
-fields plus the preserved input-item prefix. Fingerprints preserve JSON ordering,
-exclude breakpoint annotations for prefix comparison and never include headers.
-They diagnose changes to submitted input, not the provider's hidden rendered text.
-
-Each HTTP inference attempt, including retries, cancellation and incomplete
-streams, produces `request_attempt`. It retains reported root usage, response ID,
-actual model, upstream provider, service tier, cache diagnostics and the whitelisted
-`x-request-id` header when supplied. Duration and first text/tool timings use a
-monotonic clock. A tool timestamp measures the first streamed tool indication,
-not local execution. A response with no text has no first-text measurement.
-Full per-item usage attribution remains in the successful `usage` event rather
-than being duplicated in the attempt record.
-
-Abrupt process termination can leave `request` and `cache_request` without a
-closing attempt record. Its outcome and consumption are unknown. Completed
-attempt totals do not account for an unfinished remote request after the local
-process has exited.
-
-`/context` shows the last request and session cache accounting by connection,
-model and purpose. Missing counters remain unknown. The token hit rate divides
-summed reported reads by summed inputs from attempts that report both counters.
-Unreported attempts remain visible in measurement coverage. Compaction is separate.
-Legacy usage records remain readable. New usage events are not counted again
-after their attempt event, and nested attribution is never added to root totals.
-Reported tokens are not a claim about an unreported or interrupted bill.
-
-`tests/cache_report.py` summarizes journals without network access or assumed
-prices. `tests/cache_live.py` is an explicit live evaluation using existing login
-or key configuration and an isolated project/state directory:
+There is no runtime prefix fingerprinting or cache-key generation. Compare saved
+wire input offline when diagnosing a prefix change:
 
 ```sh
-python3 tests/cache_live.py /path/to/harn .build/cache-evaluation/run
-python3 tests/cache_report.py .build/cache-evaluation/run/state/harn/sessions/*/journal.jsonl
+python3 tests/cache_probe.py /path/to/journal.jsonl .build/cache-inspection --inspect
+python3 tests/cache_report.py /path/to/journal.jsonl
 ```
 
-Use the same workload and account for before/after runs. Warm identical-request
-comparisons isolate reuse, while full agent runs also include model decisions,
-instruction updates and effort changes. Do not infer daily savings from either
-one short run or API tariffs applied to a subscription. Measured results and
-acceptance targets are recorded in [cache evaluation](cache-evaluation.md).
-Independent code grading and controlled mechanism probes are described in the
-[coding workflow evaluation](cache-workflow-evaluation.md).
+Inspection compares recorded JSON fields and matching input items. It does not
+contact a provider or reproduce the provider's hidden prompt rendering. Live
+mechanism probes in the same script are explicit research operations.
+
+## Decision evidence
+
+The [coding workflow evaluation](cache-workflow-evaluation.md) measured a 31.05%
+reduction in non-reused input for controlled policy updates including warm-up.
+It did not establish overall savings, a reliable key benefit or a repeatable
+compaction cache advantage. The user therefore selected the smaller production
+scope above. Experimental request controls, per-item runtime fingerprints and
+the old read-only benchmark were removed.
+
+Those measurements describe the experimental binary before cleanup. The
+[initial evaluation](cache-evaluation.md) remains historical evidence, not a
+performance claim for the cleaned implementation. Performance acceptance remains
+at least 10% less task time or 20% less non-reused reported input without losing
+correctness, assessed on successful tasks across repeated workloads.
 
 ## Official references
 
-- [OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)
-- [OpenAI cache diagnostics](https://developers.openai.com/api/docs/guides/prompt-caching/diagnostics)
-- [Preserved reasoning](https://developers.openai.com/api/docs/guides/preserved-reasoning)
-- [Reasoning configuration updates](https://developers.openai.com/api/docs/guides/reasoning)
-- [Sol model capabilities and API prices](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+- [Prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)
+- [Cache diagnostics](https://developers.openai.com/api/docs/guides/prompt-caching/diagnostics)
 - [Subscription inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)

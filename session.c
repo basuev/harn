@@ -496,8 +496,7 @@ int session_open(const char *resume)
         } else if (type && !strcmp(type, "policy")) {
             json_decref(app.policy_snapshot);
             app.policy_snapshot = json_deep_copy(data);
-        } else if (type && (!strcmp(type, "cache_request") || !strcmp(type, "request_attempt") ||
-                            !strcmp(type, "reasoning_context")))
+        } else if (type && !strcmp(type, "request_attempt"))
             cache_restore(type, data);
         else if (type && !strcmp(type, "usage")) {
             usage_restore(data);
@@ -646,24 +645,16 @@ void session_recover(void)
 static void history_append(json_t *input, size_t index)
 {
     json_t *item = json_array_get(app.items, index);
-    if (jstr(item, "type") && !strcmp(jstr(item, "type"), "configuration_update")) {
-        if (index < app.connection_start || !model_supports("supports_reasoning_effort_updates") ||
-            index < (size_t)jint(app.reasoning_state, "start", 0))
-            return;
-        size_t n = json_array_size(input);
-        const char *role = n ? jstr(json_array_get(input, n - 1), "role") : NULL;
-        if (role && !strcmp(role, "user"))
-            json_array_insert(input, n - 1, item);
-        else
-            json_array_append(input, item);
+    /* Experimental effort-update items in older journals are not portable input.
+     * The selected effort is restored separately and sent on each request. */
+    if (jstr(item, "type") && !strcmp(jstr(item, "type"), "configuration_update"))
         return;
-    }
     if (index >= app.connection_start) {
         json_array_append(input, item);
         return;
     }
     const char *type = jstr(item, "type"), *role = jstr(item, "role");
-    if (type && (!strcmp(type, "reasoning") || !strcmp(type, "configuration_update")))
+    if (type && !strcmp(type, "reasoning"))
         return;
     if (type && (!strcmp(type, "function_call") || !strcmp(type, "function_call_output"))) {
         json_t *portable = json_object();
@@ -746,8 +737,7 @@ void context_budget(json_t *model, const char *source)
     json_t *catalog = json_is_object(model) ? json_object() : json_null();
     const char *fields[] = {"context_window", "effective_context_window_percent",
                             "auto_compact_token_limit", "supported_reasoning_levels",
-                            "default_reasoning_level", "supports_reasoning_effort_updates",
-                            "prompt_cache"};
+                            "default_reasoning_level"};
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
         json_t *value = json_object_get(model, fields[i]);
         if (value)
@@ -859,10 +849,8 @@ static void session_exchange(App *other)
     EXCHANGE(instructions);
     EXCHANGE(last_usage);
     EXCHANGE(policy_snapshot);
-    EXCHANGE(cache_previous);
     EXCHANGE(cache_last);
     EXCHANGE(cache_totals);
-    EXCHANGE(reasoning_state);
     EXCHANGE(summary);
     EXCHANGE(cut);
     EXCHANGE(connection_start);
@@ -903,10 +891,8 @@ static void session_dispose(void)
     json_decref(app.delivered_instructions);
     json_decref(app.last_usage);
     json_decref(app.policy_snapshot);
-    json_decref(app.cache_previous);
     json_decref(app.cache_last);
     json_decref(app.cache_totals);
-    json_decref(app.reasoning_state);
 }
 int session_switch(const char *id)
 {

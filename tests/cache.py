@@ -18,11 +18,6 @@ class CacheChecks(unittest.TestCase):
     def events(self, kind):
         return [r["data"] for r in self.records() if r["type"] == kind]
 
-    def modern(self):
-        self.server.model_metadata = dict(
-            supports_reasoning_effort_updates=True,
-            prompt_cache=dict(ttl="30m", static_ttl="12h", diagnostics=True))
-
     def test_live_policy_changes_preserve_the_sent_prefix_and_replace_the_current_snapshot(self):
         self.server.mode = "echo"
         policy = self.project / "AGENTS.md"
@@ -36,8 +31,6 @@ class CacheChecks(unittest.TestCase):
         self.assertEqual(second["input"][:len(first["input"])], first["input"])
         self.assertNotIn("FIRST_POLICY", check.policy_text(second))
         self.assertIn("REVISED_POLICY", check.policy_text(second))
-        self.assertEqual(self.events("cache_request")[-1]["changes"], [])
-        self.assertTrue(self.events("cache_request")[-1]["history_appended"])
         policy.unlink()
         self.run_batch("THIRD", "--resume")
         self.assertNotIn("REVISED_POLICY", check.policy_text(self.server.requests[-1]))
@@ -109,55 +102,28 @@ class CacheChecks(unittest.TestCase):
         self.assertFalse(self.events("usage"))
         self.assertTrue(all(a["outcome"] != "completed" for a in self.events("request_attempt")))
 
-    def test_modern_wire_uses_static_breakpoint_and_continuation_diagnostics(self):
-        self.modern()
-        self.server.mode = "echo"
-        self.server.response_metadata = dict(id="resp_first")
-        self.run_batch("FIRST")
-        first = self.server.requests[-1]
-        self.assertNotIn("instructions", first)
-        self.assertEqual(first["prompt_cache_options"], dict(mode="implicit", ttl="30m"))
-        initial = [i for i in first["input"] if i.get("role") == "developer"]
-        self.assertEqual(initial[-1]["content"][-1]["prompt_cache_breakpoint"],
-                         dict(mode="explicit", ttl="12h"))
-        self.run_batch("SECOND", "--resume")
-        second = self.server.requests[-1]
-        self.assertEqual(second["prompt_cache_options"]["comparison_response_id"], "resp_first")
-        self.assertEqual(second["input"][:len(first["input"])], first["input"])
-        self.assertEqual(self.events("cache_request")[-1]["changes"], [])
-        self.assertEqual(json.loads((self.session() / "request.json").read_text()), second)
-
-    def test_routing_key_survives_resume_without_entering_prompt_content(self):
-        self.server.model_metadata = dict(prompt_cache=dict(key=True))
-        self.server.mode = "echo"
-        self.run_batch("FIRST")
-        first = self.server.requests[-1]
-        self.assertNotIn("prompt_cache_options", first)
-        key = first["prompt_cache_key"]
-        self.assertNotIn(key, json.dumps(first["input"]))
-        self.run_batch("SECOND", "--resume")
-        self.assertEqual(self.server.requests[-1]["prompt_cache_key"], key)
-
-    def test_effort_updates_keep_the_original_setting_and_replay_at_the_same_position(self):
-        self.modern()
+    def test_catalog_advertisements_do_not_enable_experimental_wire_fields(self):
+        self.server.model_metadata = dict(supports_reasoning_effort_updates=True,
+            prompt_cache=dict(key=True, ttl="30m", static_ttl="12h", diagnostics=True))
         self.server.mode = "echo"
         self.run_batch("FIRST", "--effort", "low")
-        first = self.server.requests[-1]
         self.run_batch("SECOND", "--resume", "--effort", "high")
-        second = self.server.requests[-1]
-        self.assertEqual(second["reasoning"], dict(effort="low"))
+        self.run_batch("THIRD", "--resume", "--effort", "default")
+        first, second, third = self.server.requests
+        self.assertEqual(first["reasoning"], dict(effort="low"))
+        self.assertEqual(second["reasoning"], dict(effort="high"))
+        self.assertNotIn("reasoning", third)
         self.assertEqual(second["input"][:len(first["input"])], first["input"])
-        self.assertEqual(second["input"][-2], dict(type="configuration_update", reasoning=dict(effort="high")))
-        self.run_batch("THIRD", "--resume")
-        third = self.server.requests[-1]
-        self.assertEqual(third["input"][:len(second["input"])], second["input"])
-        self.run_batch("FOURTH", "--resume", "--effort", "default")
-        fourth = self.server.requests[-1]
-        self.assertNotIn("reasoning", fourth)
-        self.assertFalse(any(i.get("type") == "configuration_update" for i in fourth["input"]))
+        for request in self.server.requests:
+            for field in ("prompt_cache_key", "prompt_cache_options"):
+                self.assertNotIn(field, request)
+            self.assertNotIn("prompt_cache_breakpoint", json.dumps(request))
+            self.assertFalse(any(i.get("type") == "configuration_update" for i in request["input"]))
+        self.assertFalse(self.events("cache_request"))
+        self.assertFalse(self.events("reasoning_context"))
+        self.assertEqual(json.loads((self.session() / "request.json").read_text()), third)
 
-    def test_compaction_reuses_tools_and_instructions_and_pins_current_policy(self):
-        self.modern()
+    def test_compaction_uses_summary_instructions_and_pins_current_policy(self):
         self.server.mode = "echo"
         (self.project / "AGENTS.md").write_text("CURRENT_POLICY")
         p = check.Process(self, "--effort", "low")
@@ -176,38 +142,31 @@ class CacheChecks(unittest.TestCase):
             p.finish()
         first = self.server.requests[0]
         compact = next(r for r in self.server.requests if check.is_compaction(r))
-        self.assertEqual(compact["tools"], first["tools"])
-        self.assertEqual(compact["input"][:len(first["input"])], first["input"])
-        self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="low"))
-        self.assertTrue(any(i.get("type") == "configuration_update" and
-                            i["reasoning"]["effort"] == "high" for i in self.server.requests[-1]["input"]))
+        self.assertNotIn("tools", compact)
+        self.assertIn("Summarize the conversation", compact["instructions"])
+        self.assertNotEqual(compact["instructions"], first["instructions"])
+        self.assertEqual(compact["reasoning"], dict(effort="high"))
+        self.assertEqual(self.server.requests[-1]["reasoning"], dict(effort="high"))
+        self.assertEqual(self.server.requests[-1]["instructions"], first["instructions"])
         self.assertIn("CURRENT_POLICY", check.policy_text(self.server.requests[-1]))
         self.assertEqual(self.events("compaction_usage")[0]["cache_accounted"], True)
 
-    def test_unsupported_connection_does_not_receive_effort_updates_from_earlier_history(self):
-        self.modern()
+    def test_legacy_experimental_records_do_not_affect_resume(self):
         self.server.mode = "echo"
-        self.env["HARN_SECOND_KEY"] = "KEY_SECOND"
-        self.server.key_model_id = "fixture/other-model"
-        p = check.Process(self, "--effort", "low")
-        try:
-            p.send("FIRST")
-            p.wait("OK FIRST")
-            p.send("/effort high")
-            p.wait("Effort: high")
-            p.send("SECOND")
-            p.wait("OK SECOND")
-            self.assertTrue(any(i.get("type") == "configuration_update" for i in self.server.requests[-1]["input"]))
-            self.server.model_metadata = {}
-            p.send("/provider fixture-key")
-            p.wait("Provider: fixture-key")
-            p.send("OTHER")
-            p.wait("OK OTHER")
-            other = self.server.requests[-1]
-            self.assertNotIn("prompt_cache_options", other)
-            self.assertFalse(any(i.get("type") == "configuration_update" for i in other["input"]))
-        finally:
-            p.finish()
+        self.run_batch("FIRST", "--effort", "low")
+        old_events = [dict(type="cache_request", data=dict(provider="fixture", fields={})),
+            dict(type="reasoning_context", data=dict(base="low", selected="high")),
+            dict(type="item", data=dict(type="configuration_update", reasoning=dict(effort="high")))]
+        with (self.session() / "journal.jsonl").open("a") as journal:
+            for event in old_events:
+                journal.write(json.dumps(dict(time=0, **event)) + "\n")
+        self.run_batch("SECOND", "--resume", "--effort", "high")
+        request = self.server.requests[-1]
+        self.assertEqual(request["reasoning"], dict(effort="high"))
+        self.assertFalse(any(i.get("type") == "configuration_update" for i in request["input"]))
+        self.assertNotIn("prompt_cache_key", request)
+        self.assertEqual(len(self.events("request_attempt")), 2)
+        self.assertIn("unknown (2 attempts)", self.view_context())
 
 
 if __name__ == "__main__":

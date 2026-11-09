@@ -25,7 +25,7 @@ config.h:
 	cp config.def.h $@
 
 $(OBJECTS): harn.h $(CONFIG) config.def.h vendor/linenoise/linenoise.h $(wildcard providers/*/*.h) $(PROVIDER_DEPS)
-$(BUILD)/main.o: FORCE
+$(BUILD)/connections.o: FORCE
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
