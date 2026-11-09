@@ -128,7 +128,9 @@ int instructions_load(void)
     buf_puts(
         &instructions,
         "\n\nThe latest Current harn policy snapshot in the conversation replaces all earlier "
-        "snapshots, including removed sources and skills. Historical AGENTS.md reads do not "
+        "source lists and skill catalogs, including removed sources and catalog entries. "
+        "Already read skill instructions remain available until superseded by a later whole-file "
+        "read. Historical AGENTS.md reads do not "
         "override that snapshot. Files combine by directory scope. Global rules apply everywhere. "
         "Closer directories override conflicting ancestor rules while other rules remain. "
         "Explicit user requests take precedence. Sources listed in the snapshot are loaded and do "

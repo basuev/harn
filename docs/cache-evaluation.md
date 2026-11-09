@@ -115,3 +115,8 @@ the generic model catalog as proof of authorization-specific support. See
 The separate OpenAI API-key adapter has local fixture verification. No OpenAI
 API key was available for a live API run. Its fixtures establish request encoding,
 stream handling, accounting and continuation, not actual API cache-hit rates.
+
+The final system-prompt wording explicitly distinguishes removed skill catalog
+entries from already read skill instructions. The timing binaries preceded this
+wording clarification. The final wording passed skill preservation and cache
+integration checks.
