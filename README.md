@@ -73,7 +73,8 @@ See [DESIGN.md](DESIGN.md) for architectural decisions and
 [provider patches](docs/provider-patches.md) for the adapter contract and installation.
 `/context` includes reported cache reads, write counters and request latency.
 See [prompt caching](docs/prompt-caching.md) for connection capabilities and
-[measured comparisons](docs/cache-evaluation.md).
+[measured comparisons](docs/cache-evaluation.md), including the
+[coding workflow evaluation](docs/cache-workflow-evaluation.md).
 
 ## Checks
 

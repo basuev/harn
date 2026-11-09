@@ -83,8 +83,9 @@ key and the stable key `harn:controlled-comparison`. No tools were executed.
 - The last two keyed requests each read 41,728 of 41,885 tokens, or 99.63%.
 - Median first-text times were 2,973 ms without the key and 3,568.5 ms with it.
 
-This supports stable routing keys for this subscription connection but does not
-demonstrate a latency gain. Repeated identical prompts isolate reuse better than
+This small probe associated the stable key with cache reads for this subscription
+connection. It does not establish the routing mechanism or a latency gain.
+Repeated identical prompts isolate reuse better than
 an agent conversation, which grows and can change model-side configuration.
 
 ## Compaction pair

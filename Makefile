@@ -40,6 +40,7 @@ check-core: fixture
 	python3 tests/check.py
 	python3 tests/responses.py
 	python3 tests/cache.py
+	python3 tests/cache_benchmark.py
 	python3 tests/ui.py
 	python3 tests/render.py
 	python3 tests/job_control.py

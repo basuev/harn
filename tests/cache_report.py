@@ -25,13 +25,17 @@ def summarize(paths):
                 key = (data.get("provider", "unknown"), data.get("model", "unknown"), data.get("kind", "inference"))
                 group = groups.setdefault(key, dict(provider=key[0], model=key[1], kind=key[2],
                     attempts=0, completed=0, input_tokens=0, cached_tokens=0, cache_input_tokens=0,
-                    cache_write_tokens=0, input_measured=0, cache_measured=0, writes_measured=0,
+                    cache_write_tokens=0, input_measured=0, output_tokens=0, output_measured=0,
+                    cache_measured=0, writes_measured=0,
                     durations_ms=[], first_text_ms=[], first_tool_ms=[]))
                 group["attempts"] += 1
                 group["completed"] += data.get("outcome") == "completed"
                 usage = data.get("usage") or {}
                 details = usage.get("input_tokens_details") or {}
                 total, cached, writes = usage.get("input_tokens"), details.get("cached_tokens"), details.get("cache_write_tokens")
+                if isinstance(usage.get("output_tokens"), int):
+                    group["output_measured"] += 1
+                    group["output_tokens"] += usage["output_tokens"]
                 if isinstance(total, int):
                     group["input_measured"] += 1
                     group["input_tokens"] += total

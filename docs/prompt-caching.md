@@ -22,7 +22,7 @@ cycle does not authorize a prepared write under those new rules.
 
 Adapters supply optional normalized model metadata:
 
-- `prompt_cache.key`: send a stable session routing key outside prompt content.
+- `prompt_cache.key`: send a stable session cache key outside prompt content.
 - `prompt_cache.ttl`: enable Responses cache options with this request lifetime.
 - `prompt_cache.static_ttl`: lifetime of the initial developer-prefix breakpoint.
 - `prompt_cache.diagnostics`: compare with the preceding completed response from
@@ -33,6 +33,11 @@ Adapters supply optional normalized model metadata:
 These fields are adapter capabilities, not a claim that every compatible endpoint
 implements the same protocol. The core does not infer them from model names.
 Saved capabilities support the existing temporary catalog-outage behavior.
+
+In the [official API guide](https://developers.openai.com/api/docs/guides/prompt-caching#prompt-cache-keys),
+GPT-5.6 and later route caches automatically. Keys separate cache accounting and
+are not required to optimize routing. Subscription OAuth behavior is measured
+separately. Acceptance of a key alone does not prove a routing benefit.
 
 The optional OpenAI API adapter documents confirmed capabilities for
 `gpt-6.1-sol`. Its request and static lifetimes default to `"30m"`. Personal
