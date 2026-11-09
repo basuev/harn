@@ -13,10 +13,10 @@ index 0000000..91140dc
 +	cmake --build .build/chatgpt-jwt --target jwt_static --parallel
 diff --git a/providers/chatgpt/check.py b/providers/chatgpt/check.py
 new file mode 100644
-index 0000000..d05412f
+index 0000000..adc257c
 --- /dev/null
 +++ b/providers/chatgpt/check.py
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,237 @@
 +#!/usr/bin/env python3
 +"""Subscription authentication and adapter contract, using a local OIDC server."""
 +import base64
@@ -236,7 +236,7 @@ index 0000000..d05412f
 +    run_batch = check.Checks.run_batch
 +    session = check.Checks.session
 +
-+    def test_subscription_capabilities_override_api_catalog_advertisements(self):
++    def test_subscription_ignores_experimental_catalog_advertisements(self):
 +        self.server.model_metadata = dict(supports_reasoning_effort_updates=True,
 +                                         prompt_cache=dict(ttl="30m", diagnostics=True))
 +        self.server.mode = "echo"
@@ -244,7 +244,8 @@ index 0000000..d05412f
 +        first = self.server.requests[-1]
 +        self.run_batch("SECOND", "--resume", "--effort", "high")
 +        second = self.server.requests[-1]
-+        self.assertEqual(first["prompt_cache_key"], second["prompt_cache_key"])
++        self.assertNotIn("prompt_cache_key", first)
++        self.assertNotIn("prompt_cache_key", second)
 +        self.assertNotIn("prompt_cache_options", second)
 +        self.assertEqual(second["reasoning"], dict(effort="high"))
 +        self.assertFalse(any(i.get("type") == "configuration_update" for i in second["input"]))
@@ -276,10 +277,10 @@ index 0000000..bd60e76
 +#endif
 diff --git a/providers/chatgpt/provider.c b/providers/chatgpt/provider.c
 new file mode 100644
-index 0000000..cd0cb8b
+index 0000000..bf4818c
 --- /dev/null
 +++ b/providers/chatgpt/provider.c
-@@ -0,0 +1,659 @@
+@@ -0,0 +1,645 @@
 +#include "harn.h"
 +#include "provider.h"
 +#include <arpa/inet.h>
@@ -295,20 +296,6 @@ index 0000000..cd0cb8b
 +#include <sys/socket.h>
 +#include <time.h>
 +#include <unistd.h>
-+
-+static json_t *chatgpt_catalog(json_t *body)
-+{
-+    json_t *models = catalog_models(body), *model;
-+    size_t i;
-+    json_array_foreach(models, i, model) {
-+        /* The subscription accepts routing keys but rejects API cache options,
-+         * breakpoints and configuration_update, even when its catalog advertises
-+         * API effort updates. Verified with subscription OAuth on 2026-11-09. */
-+        json_object_set_new(model, "prompt_cache", json_pack("{s:b}", "key", 1));
-+        json_object_set_new(model, "supports_reasoning_effort_updates", json_false());
-+    }
-+    return models;
-+}
 +
 +typedef struct {
 +    char *issuer;
@@ -931,11 +918,11 @@ index 0000000..cd0cb8b
 +    return 0;
 +}
 +const Provider chatgpt_provider = {
-+    .id = "chatgpt", .revision = "2", .auth_label = "ChatGPT sign-in",
++    .id = "chatgpt", .revision = "3", .auth_label = "ChatGPT sign-in",
 +    .request_path = "/responses", .ready = chatgpt_ready,
 +    .logout = chatgpt_logout, .refresh = chatgpt_refresh,
-+    .models = responses_models, .catalog = chatgpt_catalog, .headers = bearer_headers,
-+    .encode = responses_cached_encode, .event = responses_event,
++    .models = responses_models, .catalog = catalog_models, .headers = bearer_headers,
++    .encode = responses_encode, .event = responses_event,
 +    .classify = chatgpt_classify, .legacy = chatgpt_legacy,
 +    .pollfds = chatgpt_pollfds, .tick = chatgpt_tick, .close = chatgpt_close,
 +};

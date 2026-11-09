@@ -1,11 +1,11 @@
 diff --git a/providers/openai/check.py b/providers/openai/check.py
 new file mode 100644
-index 0000000..4f82ac5
+index 0000000..4d80dd2
 --- /dev/null
 +++ b/providers/openai/check.py
 @@ -0,0 +1,35 @@
 +#!/usr/bin/env python3
-+"""OpenAI API contract and modern cache controls, without real API credentials."""
++"""Standard Responses API contract, without real API credentials."""
 +from pathlib import Path
 +import sys
 +import unittest
@@ -15,30 +15,30 @@ index 0000000..4f82ac5
 +from provider_contract import Contract, run
 +
 +
-+class OpenAICacheTests(unittest.TestCase):
++class OpenAIProtocolTests(unittest.TestCase):
 +    setUp = Contract.setUp
 +    tearDown = Contract.tearDown
 +    run_batch = check.Checks.run_batch
 +    session = check.Checks.session
 +    records = check.Checks.records
 +
-+    def test_sol_api_enables_cache_options_and_effort_updates(self):
++    def test_sol_uses_standard_requests_and_selected_effort(self):
 +        self.server.model_id = "gpt-6.1-sol"
 +        self.server.mode = "echo"
 +        self.run_batch("FIRST", "-m", "gpt-6.1-sol", "--effort", "low")
 +        first = self.server.requests[-1]
-+        self.assertEqual(first["prompt_cache_options"], dict(mode="implicit", ttl="30m"))
-+        self.assertNotIn("instructions", first)
++        self.assertNotIn("prompt_cache_options", first)
++        self.assertNotIn("prompt_cache_key", first)
++        self.assertIn("instructions", first)
 +        self.run_batch("SECOND", "--resume", "--effort", "high")
 +        second = self.server.requests[-1]
-+        self.assertEqual(second["reasoning"], dict(effort="low"))
-+        self.assertTrue(any(i.get("type") == "configuration_update" and
-+                            i["reasoning"]["effort"] == "high" for i in second["input"]))
++        self.assertEqual(second["reasoning"], dict(effort="high"))
++        self.assertFalse(any(i.get("type") == "configuration_update" for i in second["input"]))
 +        self.assertEqual(check.Checks.saved_requests(self), self.server.requests)
 +
 +
 +if __name__ == "__main__":
-+    run("openai", key_env="OPENAI_API_KEY", extra=(OpenAICacheTests,))
++    run("openai", key_env="OPENAI_API_KEY", extra=(OpenAIProtocolTests,))
 diff --git a/providers/openai/config.example.h b/providers/openai/config.example.h
 new file mode 100644
 index 0000000..635bd92
@@ -61,46 +61,34 @@ index 0000000..635bd92
 +#endif
 diff --git a/providers/openai/provider.c b/providers/openai/provider.c
 new file mode 100644
-index 0000000..65f6f61
+index 0000000..ba88c94
 --- /dev/null
 +++ b/providers/openai/provider.c
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,26 @@
 +#include "harn.h"
 +#include "provider.h"
 +#include <string.h>
-+
-+#ifndef OPENAI_PROMPT_CACHE_TTL
-+#define OPENAI_PROMPT_CACHE_TTL "30m"
-+#endif
-+#ifndef OPENAI_STATIC_CACHE_TTL
-+#define OPENAI_STATIC_CACHE_TTL "30m"
-+#endif
 +
 +static json_t *openai_catalog(json_t *body)
 +{
 +    json_t *models = catalog_data(body), *model;
 +    size_t i;
 +    json_array_foreach(models, i, model) {
-+        /* Confirmed API capabilities, not guesses based on a model-name prefix.
-+         * Other catalog entries retain their server-reported metadata. */
++        /* Documented model budget and effort choices supplement the minimal catalog. */
 +        if (!strcmp(jstr(model, "slug"), "gpt-6.1-sol")) {
 +            json_object_set_new(model, "context_window", json_integer(1050000));
 +            json_object_set_new(model, "supported_reasoning_levels",
 +                                json_pack("[s,s,s,s,s]", "low", "medium", "high", "xhigh", "max"));
 +            json_object_set_new(model, "default_reasoning_level", json_string("medium"));
-+            json_object_set_new(model, "supports_reasoning_effort_updates", json_true());
-+            json_object_set_new(model, "prompt_cache", json_pack("{s:s,s:s,s:b}",
-+                "ttl", OPENAI_PROMPT_CACHE_TTL, "static_ttl", OPENAI_STATIC_CACHE_TTL,
-+                "diagnostics", 1));
 +        }
 +    }
 +    return models;
 +}
 +const Provider openai_provider = {
-+    .id = "openai", .revision = "1", .auth_label = "API key",
++    .id = "openai", .revision = "2", .auth_label = "API key",
 +    .request_path = "/responses", .ready = api_key_ready, .logout = api_key_logout,
 +    .models = responses_models, .catalog = openai_catalog, .headers = bearer_headers,
-+    .encode = responses_cached_encode, .event = responses_event,
++    .encode = responses_encode, .event = responses_event,
 +    .legacy = api_key_legacy,
 +};
 diff --git a/providers/openai/provider.h b/providers/openai/provider.h

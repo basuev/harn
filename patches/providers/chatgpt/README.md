@@ -1,8 +1,8 @@
 # ChatGPT subscription
 
-Core commit: `e100d7027f071e6a144b99aefe4c7ee28b60f56a`
+Core commit: `de667c98782cb004598763935ab1c967e837371c`
 
-Adapter revision: `2`. Apply independently of other provider patches.
+Adapter revision: `3`. Apply independently of other provider patches.
 
 ## Install
 
@@ -59,8 +59,9 @@ or call the real service. Live verification on 2026-11-09 used subscription OAut
 
 ## Prompt caching
 
-A stable key is preserved across a session and its resumes. Subscription inference
-currently rejects API TTL, breakpoint, diagnostics and configuration-update
-fields, even when the generic catalog advertises effort updates. The adapter
-therefore uses subscription-confirmed capabilities. See [prompt caching](../../../docs/prompt-caching.md)
-and [measured results](../../../docs/cache-evaluation.md).
+Uses ordinary Responses requests without a generated cache key, TTL, breakpoint
+or configuration-update items. Selected effort is a request-level field. Catalog
+advertisements do not enable experimental controls. Policy snapshots preserve
+the submitted conversation prefix when project rules change. See
+[prompt caching](../../../docs/prompt-caching.md) and
+[measured results](../../../docs/cache-workflow-evaluation.md).

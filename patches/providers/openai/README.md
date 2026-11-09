@@ -1,8 +1,8 @@
 # OpenAI API
 
-Core commit: `e100d7027f071e6a144b99aefe4c7ee28b60f56a`
+Core commit: `de667c98782cb004598763935ab1c967e837371c`
 
-Adapter revision: `1`. Apply independently of other provider patches.
+Adapter revision: `2`. Apply independently of other provider patches.
 
 ## Install
 
@@ -32,15 +32,11 @@ and `make install PREFIX="$HOME/.local"`. No key belongs in source files.
 No dependencies beyond the core. Adapter code is ISC-licensed. Uses API-key
 authorization and stateless streaming Responses, independently of ChatGPT OAuth.
 
-Confirmed `gpt-6.1-sol` capabilities include an initial developer-prefix
-breakpoint, implicit history caching, cache diagnostics, and explicit effort
-updates through `configuration_update`. Its API context budget and advertised
-effort levels come from the official model documentation. Other model entries
-retain metadata supplied by the service, without inferred capability flags.
-
-`OPENAI_PROMPT_CACHE_TTL` and `OPENAI_STATIC_CACHE_TTL` in personal `config.h`
-default to `"30m"`. Either may be `"12h"`, which has a higher cache-write price.
-There is no automatic prewarming. See [prompt caching](../../../docs/prompt-caching.md).
+Uses the ordinary Responses codec without generated cache keys, explicit TTL,
+breakpoints or configuration-update items. Selected effort is sent on each
+request. The documented `gpt-6.1-sol` context budget and effort choices supplement
+the API's minimal model catalog. Other model entries use service metadata.
+See [prompt caching](../../../docs/prompt-caching.md) for the retained core scope.
 
 ## Verification
 
@@ -50,6 +46,6 @@ python3 providers/openai/check.py
 
 This builds and installs a fixture configuration and exercises local HTTP/PTY
 requests, authentication errors, streaming, tools, compaction, continuation,
-resume, connection isolation and API cache controls. It does not use real API
+resume, connection isolation and request-level effort changes. It does not use real API
 credentials or call OpenAI. Live API-key verification has not been performed.
 See [the shared contract](../../../docs/provider-patches.md).

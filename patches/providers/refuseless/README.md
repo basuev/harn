@@ -1,6 +1,6 @@
 # Refuseless
 
-Core commit: `e100d7027f071e6a144b99aefe4c7ee28b60f56a`
+Core commit: `de667c98782cb004598763935ab1c967e837371c`
 
 Adapter revision: `1`. Apply independently of other provider patches.
 
