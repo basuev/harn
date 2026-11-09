@@ -703,6 +703,7 @@ class Presentation(unittest.TestCase):
         self.assertNotIn(b"EDITOR RESPONSE", self.output)
         (self.case.project / "editor-close").touch()
         self.wait_answer("EDITOR RESPONSE")
+        self.read_until(lambda: b"EDITOR RESPONSE" in self.output)
         self.assertIn(b"\x1b[2m  read a.py:", self.output)
         self.assertIn(b"\x1b[22m", self.output)
         self.send("\r")
