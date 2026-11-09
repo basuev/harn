@@ -1,6 +1,6 @@
 # OpenAI API
 
-Core commit: `802b58dc2b9e24ede5725db8f5bf630f071b6f8e`
+Core commit: `e100d7027f071e6a144b99aefe4c7ee28b60f56a`
 
 Adapter revision: `1`. Apply independently of other provider patches.
 
