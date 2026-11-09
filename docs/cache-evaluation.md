@@ -8,6 +8,9 @@ individual routing observations and aggregate measurements are retained in
 logs are under `.build/cache-evaluation/`. They contain personal instructions and
 are deliberately excluded from the public repository.
 
+The follow-up [coding workflow evaluation](cache-workflow-evaluation.md) uses
+independently graded code changes and repeated controlled mechanism probes.
+
 ## Starting state
 
 The historical 2026-11-05 through 2026-11-09 logs contained 1,320 ordinary requests

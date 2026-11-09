@@ -1,0 +1,1175 @@
+{
+  "measured_on": "2026-11-09",
+  "authentication": "ChatGPT subscription OAuth",
+  "model": "gpt-6.1-sol",
+  "workload_sha256": "0a6cc680e2d816b6e6afe3a4c8f215f147283ed871d6fb6f7e81490ad4516624",
+  "baseline": {
+    "core_revision": "88c501a",
+    "binary_sha256": "52b662eb1b511ce0110be4e37a422488b8403f4723621341b02a1dd15f8caa9e",
+    "cohorts": [
+      {
+        "mode": "persistent",
+        "runs": 2,
+        "successful_workflows": 2,
+        "successful_tasks": 8,
+        "attempted_tasks": 8,
+        "wall_ms_per_successful_task": 64070.75,
+        "uncached_per_successful_task": 54782.375,
+        "turn_wall_ms_median": 56335.0,
+        "turn_wall_ms_p95": 67553,
+        "input_tokens": 454131,
+        "cached_tokens": 15872,
+        "attempts": 67,
+        "reported_usage": [
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "inference",
+            "attempts": 65,
+            "completed": 65,
+            "input_tokens": 431870,
+            "cached_tokens": 15872,
+            "cache_input_tokens": 431870,
+            "cache_write_tokens": 0,
+            "input_measured": 65,
+            "output_tokens": 10986,
+            "output_measured": 65,
+            "cache_measured": 65,
+            "writes_measured": 65,
+            "cache_read_percent": 3.68,
+            "durations_ms_median": null,
+            "durations_ms_measured": 0,
+            "first_text_ms_median": null,
+            "first_text_ms_measured": 0,
+            "first_tool_ms_median": null,
+            "first_tool_ms_measured": 0
+          },
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "compaction",
+            "attempts": 2,
+            "completed": 2,
+            "input_tokens": 22261,
+            "cached_tokens": 0,
+            "cache_input_tokens": 22261,
+            "cache_write_tokens": 0,
+            "input_measured": 2,
+            "output_tokens": 2053,
+            "output_measured": 2,
+            "cache_measured": 2,
+            "writes_measured": 2,
+            "cache_read_percent": 0.0,
+            "durations_ms_median": null,
+            "durations_ms_measured": 0,
+            "first_text_ms_median": null,
+            "first_text_ms_measured": 0,
+            "first_tool_ms_median": null,
+            "first_tool_ms_measured": 0
+          }
+        ],
+        "cache_read_percent": 3.5,
+        "output_tokens": 13039
+      }
+    ],
+    "runs": [
+      {
+        "mode": "persistent",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 36,
+        "input_tokens": 220574,
+        "cached_tokens": 15872,
+        "input_not_reported_reused": 204702,
+        "workflow_wall_ms": 272971,
+        "ms_per_successful_task": 68242.75,
+        "uncached_per_successful_task": 51175.5,
+        "trial": "baseline-1/1-persistent",
+        "journal_sha256": "318c5b022f1dc5f7475ad5a96976e3818fc8b51590dbce69c8af58be8f9b43c5",
+        "output_tokens": 6702,
+        "compaction_wall_ms": 26274,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 66474
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 53335
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 67553
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 59335
+          }
+        ]
+      },
+      {
+        "mode": "persistent",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 31,
+        "input_tokens": 233557,
+        "cached_tokens": 0,
+        "input_not_reported_reused": 233557,
+        "workflow_wall_ms": 239595,
+        "ms_per_successful_task": 59898.75,
+        "uncached_per_successful_task": 58389.25,
+        "trial": "baseline-1/2-persistent",
+        "journal_sha256": "22ea8e18c21aa183c28463e708369cd70d1dfd97cba03298bc99b4842269f626",
+        "output_tokens": 6337,
+        "compaction_wall_ms": 23775,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 64640
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 47596
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 50443
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 53141
+          }
+        ]
+      }
+    ]
+  },
+  "current": {
+    "core_revision": "d6dc685",
+    "binary_sha256": "e811448249ebfcdf7920ad00a1757d1a17a29029f5b0b558f2bfe3cb8a60705d",
+    "cohorts": [
+      {
+        "mode": "persistent",
+        "runs": 2,
+        "successful_workflows": 2,
+        "successful_tasks": 8,
+        "attempted_tasks": 8,
+        "wall_ms_per_successful_task": 61701.0,
+        "uncached_per_successful_task": 58179.875,
+        "turn_wall_ms_median": 55654.5,
+        "turn_wall_ms_p95": 66506,
+        "input_tokens": 491295,
+        "cached_tokens": 25856,
+        "attempts": 67,
+        "reported_usage": [
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "inference",
+            "attempts": 65,
+            "completed": 65,
+            "input_tokens": 462790,
+            "cached_tokens": 21120,
+            "cache_input_tokens": 462790,
+            "cache_write_tokens": 0,
+            "input_measured": 65,
+            "output_tokens": 10292,
+            "output_measured": 65,
+            "cache_measured": 65,
+            "writes_measured": 65,
+            "cache_read_percent": 4.56,
+            "durations_ms_median": 4827,
+            "durations_ms_measured": 65,
+            "first_text_ms_median": 3723,
+            "first_text_ms_measured": 15,
+            "first_tool_ms_median": 3488,
+            "first_tool_ms_measured": 57
+          },
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "compaction",
+            "attempts": 2,
+            "completed": 2,
+            "input_tokens": 28505,
+            "cached_tokens": 4736,
+            "cache_input_tokens": 28505,
+            "cache_write_tokens": 0,
+            "input_measured": 2,
+            "output_tokens": 1774,
+            "output_measured": 2,
+            "cache_measured": 2,
+            "writes_measured": 2,
+            "cache_read_percent": 16.61,
+            "durations_ms_median": 21776.0,
+            "durations_ms_measured": 2,
+            "first_text_ms_median": 3486.5,
+            "first_text_ms_measured": 2,
+            "first_tool_ms_median": null,
+            "first_tool_ms_measured": 0
+          }
+        ],
+        "cache_read_percent": 5.26,
+        "output_tokens": 12066
+      },
+      {
+        "mode": "resume",
+        "runs": 2,
+        "successful_workflows": 2,
+        "successful_tasks": 8,
+        "attempted_tasks": 8,
+        "wall_ms_per_successful_task": 60836.625,
+        "uncached_per_successful_task": 46266.75,
+        "turn_wall_ms_median": 53507.0,
+        "turn_wall_ms_p95": 65300,
+        "input_tokens": 397910,
+        "cached_tokens": 27776,
+        "attempts": 63,
+        "reported_usage": [
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "inference",
+            "attempts": 61,
+            "completed": 61,
+            "input_tokens": 374235,
+            "cached_tokens": 26240,
+            "cache_input_tokens": 374235,
+            "cache_write_tokens": 0,
+            "input_measured": 61,
+            "output_tokens": 10592,
+            "output_measured": 61,
+            "cache_measured": 61,
+            "writes_measured": 61,
+            "cache_read_percent": 7.01,
+            "durations_ms_median": 5260,
+            "durations_ms_measured": 61,
+            "first_text_ms_median": 4040.0,
+            "first_text_ms_measured": 16,
+            "first_tool_ms_median": 3532,
+            "first_tool_ms_measured": 53
+          },
+          {
+            "provider": "chatgpt",
+            "model": "gpt-6.1-sol",
+            "kind": "compaction",
+            "attempts": 2,
+            "completed": 2,
+            "input_tokens": 23675,
+            "cached_tokens": 1536,
+            "cache_input_tokens": 23675,
+            "cache_write_tokens": 0,
+            "input_measured": 2,
+            "output_tokens": 1673,
+            "output_measured": 2,
+            "cache_measured": 2,
+            "writes_measured": 2,
+            "cache_read_percent": 6.49,
+            "durations_ms_median": 22677.0,
+            "durations_ms_measured": 2,
+            "first_text_ms_median": 3580.0,
+            "first_text_ms_measured": 2,
+            "first_tool_ms_median": null,
+            "first_tool_ms_measured": 0
+          }
+        ],
+        "cache_read_percent": 6.98,
+        "output_tokens": 12265
+      }
+    ],
+    "runs": [
+      {
+        "mode": "persistent",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 34,
+        "input_tokens": 247559,
+        "cached_tokens": 17792,
+        "input_not_reported_reused": 229767,
+        "workflow_wall_ms": 249455,
+        "ms_per_successful_task": 62363.75,
+        "uncached_per_successful_task": 57441.75,
+        "trial": "run-1/1-persistent",
+        "journal_sha256": "3f30a7617eff959b5d97a8c1449d8279fcf1d06813b396a435d11c3929e200ba",
+        "output_tokens": 6339,
+        "compaction_wall_ms": 24903,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 66506
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 46737
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 54185
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 57124
+          }
+        ]
+      },
+      {
+        "mode": "resume",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 32,
+        "input_tokens": 216488,
+        "cached_tokens": 19072,
+        "input_not_reported_reused": 197416,
+        "workflow_wall_ms": 240333,
+        "ms_per_successful_task": 60083.25,
+        "uncached_per_successful_task": 49354.0,
+        "trial": "run-1/1-resume",
+        "journal_sha256": "b212562fc2354d0387f665786adc29e962530010745c28fcf69532af0d71ad84",
+        "output_tokens": 6161,
+        "compaction_wall_ms": 21252,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 60583
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 48163
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 57008
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 53327
+          }
+        ]
+      },
+      {
+        "mode": "resume",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 31,
+        "input_tokens": 181422,
+        "cached_tokens": 8704,
+        "input_not_reported_reused": 172718,
+        "workflow_wall_ms": 246360,
+        "ms_per_successful_task": 61590.0,
+        "uncached_per_successful_task": 43179.5,
+        "trial": "run-1/2-resume",
+        "journal_sha256": "c67c469c4308abb69eb18d2c65fb4ffab982992c233e581a778326b68751dcdd",
+        "output_tokens": 6104,
+        "compaction_wall_ms": 26844,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 53687
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 52965
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 47564
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 65300
+          }
+        ]
+      },
+      {
+        "mode": "persistent",
+        "successful_tasks": 4,
+        "workflow_passed": true,
+        "attempts": 33,
+        "input_tokens": 243736,
+        "cached_tokens": 8064,
+        "input_not_reported_reused": 235672,
+        "workflow_wall_ms": 244153,
+        "ms_per_successful_task": 61038.25,
+        "uncached_per_successful_task": 58918.0,
+        "trial": "run-2-persistent/1-persistent",
+        "journal_sha256": "c8055b2deaaa4914882cbada0889199edbde177e58de3c05dc6760e8d452ecd7",
+        "output_tokens": 5727,
+        "compaction_wall_ms": 18784,
+        "turns": [
+          {
+            "stage": 1,
+            "passed": true,
+            "wall_ms": 65262
+          },
+          {
+            "stage": 2,
+            "passed": true,
+            "wall_ms": 51175
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "wall_ms": 48921
+          },
+          {
+            "stage": 4,
+            "passed": true,
+            "wall_ms": 60011
+          }
+        ]
+      }
+    ]
+  },
+  "primary_comparison": {
+    "task_wall_change_percent": -3.7,
+    "uncached_change_percent": 6.2,
+    "input_change_percent": 8.18,
+    "output_change_percent": -7.46,
+    "turn_p95_change_percent": -1.55,
+    "paired_observations": [
+      {
+        "pair": 1,
+        "baseline_trial": "baseline-1/1-persistent",
+        "current_trial": "run-1/1-persistent",
+        "task_wall_change_percent": -8.61,
+        "uncached_change_percent": 12.24
+      },
+      {
+        "pair": 2,
+        "baseline_trial": "baseline-1/2-persistent",
+        "current_trial": "run-2-persistent/1-persistent",
+        "task_wall_change_percent": 1.9,
+        "uncached_change_percent": 0.91
+      }
+    ]
+  },
+  "acceptance": {
+    "minimum_time_reduction_percent": 10,
+    "minimum_uncached_reduction_percent": 20,
+    "all_24_code_checks_passed": true,
+    "repeatable_overall_improvement_demonstrated": false
+  },
+  "current_process_lifetime": {
+    "resume_time_change_percent": -1.4,
+    "interpretation": "Descriptive only. Agent actions and output differ. No established cache advantage from keeping a process alive."
+  },
+  "probes": {
+    "attempts": 36,
+    "protocol_valid": 36,
+    "groups": [
+      {
+        "factor": "key",
+        "variant": "no-key",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 90360,
+          "cached_tokens": 18304,
+          "output_tokens": 42,
+          "input_not_reported_reused": 72056,
+          "cache_read_percent": 20.26,
+          "duration_ms_median": 3470.0,
+          "first_text_ms_median": 3193.5
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 30120,
+          "cached_tokens": 0,
+          "output_tokens": 14,
+          "input_not_reported_reused": 30120,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3227.0,
+          "first_text_ms_median": 2977.0
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "stable-key",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 90360,
+          "cached_tokens": 0,
+          "output_tokens": 42,
+          "input_not_reported_reused": 90360,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3443.0,
+          "first_text_ms_median": 3298.5
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 30120,
+          "cached_tokens": 0,
+          "output_tokens": 14,
+          "input_not_reported_reused": 30120,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3986.0,
+          "first_text_ms_median": 3798.5
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "rewrite",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 57728,
+          "cached_tokens": 0,
+          "output_tokens": 42,
+          "input_not_reported_reused": 57728,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3866.0,
+          "first_text_ms_median": 3654.0
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 19536,
+          "cached_tokens": 0,
+          "output_tokens": 14,
+          "input_not_reported_reused": 19536,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3861.0,
+          "first_text_ms_median": 3629.0
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "append",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 59770,
+          "cached_tokens": 19968,
+          "output_tokens": 42,
+          "input_not_reported_reused": 39802,
+          "cache_read_percent": 33.41,
+          "duration_ms_median": 4166.0,
+          "first_text_ms_median": 3792.0
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 21562,
+          "cached_tokens": 18176,
+          "output_tokens": 14,
+          "input_not_reported_reused": 3386,
+          "cache_read_percent": 84.3,
+          "duration_ms_median": 3748.5,
+          "first_text_ms_median": 3541.0
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "distinct",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 87826,
+          "cached_tokens": 37888,
+          "output_tokens": 2133,
+          "input_not_reported_reused": 49938,
+          "cache_read_percent": 43.14,
+          "duration_ms_median": 3730.0,
+          "first_text_ms_median": 3182.0
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 27586,
+          "cached_tokens": 13568,
+          "output_tokens": 2105,
+          "input_not_reported_reused": 14018,
+          "cache_read_percent": 49.18,
+          "duration_ms_median": 24997.0,
+          "first_text_ms_median": 2992.5
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "shared",
+        "all_calls": {
+          "attempts": 6,
+          "completed": 6,
+          "valid": 6,
+          "measured": 6,
+          "input_tokens": 88760,
+          "cached_tokens": 37760,
+          "output_tokens": 2116,
+          "input_not_reported_reused": 51000,
+          "cache_read_percent": 42.54,
+          "duration_ms_median": 4167.0,
+          "first_text_ms_median": 3563.5
+        },
+        "probes": {
+          "attempts": 2,
+          "completed": 2,
+          "valid": 2,
+          "measured": 2,
+          "input_tokens": 28520,
+          "cached_tokens": 8832,
+          "output_tokens": 2088,
+          "input_not_reported_reused": 19688,
+          "cache_read_percent": 30.97,
+          "duration_ms_median": 24507.5,
+          "first_text_ms_median": 3493.5
+        }
+      }
+    ],
+    "trials": [
+      {
+        "factor": "key",
+        "variant": "no-key",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 45180,
+          "cached_tokens": 9600,
+          "output_tokens": 21,
+          "input_not_reported_reused": 35580,
+          "cache_read_percent": 21.25,
+          "duration_ms_median": 3707,
+          "first_text_ms_median": 3377
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "stable-key",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 45180,
+          "cached_tokens": 0,
+          "output_tokens": 21,
+          "input_not_reported_reused": 45180,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 4401,
+          "first_text_ms_median": 4147
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "stable-key",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 45180,
+          "cached_tokens": 0,
+          "output_tokens": 21,
+          "input_not_reported_reused": 45180,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3391,
+          "first_text_ms_median": 3230
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "no-key",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 45180,
+          "cached_tokens": 8704,
+          "output_tokens": 21,
+          "input_not_reported_reused": 36476,
+          "cache_read_percent": 19.27,
+          "duration_ms_median": 3221,
+          "first_text_ms_median": 3010
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "rewrite",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 28864,
+          "cached_tokens": 0,
+          "output_tokens": 21,
+          "input_not_reported_reused": 28864,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3331,
+          "first_text_ms_median": 2993
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "append",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 29885,
+          "cached_tokens": 9600,
+          "output_tokens": 21,
+          "input_not_reported_reused": 20285,
+          "cache_read_percent": 32.12,
+          "duration_ms_median": 4172,
+          "first_text_ms_median": 3647
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "append",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 29885,
+          "cached_tokens": 10368,
+          "output_tokens": 21,
+          "input_not_reported_reused": 19517,
+          "cache_read_percent": 34.69,
+          "duration_ms_median": 4160,
+          "first_text_ms_median": 3937
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "rewrite",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 28864,
+          "cached_tokens": 0,
+          "output_tokens": 21,
+          "input_not_reported_reused": 28864,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 4532,
+          "first_text_ms_median": 4265
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "distinct",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 43913,
+          "cached_tokens": 0,
+          "output_tokens": 1063,
+          "input_not_reported_reused": 43913,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 3504,
+          "first_text_ms_median": 2897
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "shared",
+        "repetition": 1,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 44380,
+          "cached_tokens": 37760,
+          "output_tokens": 1096,
+          "input_not_reported_reused": 6620,
+          "cache_read_percent": 85.08,
+          "duration_ms_median": 4073,
+          "first_text_ms_median": 3679
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "shared",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 44380,
+          "cached_tokens": 0,
+          "output_tokens": 1020,
+          "input_not_reported_reused": 44380,
+          "cache_read_percent": 0.0,
+          "duration_ms_median": 4261,
+          "first_text_ms_median": 3448
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "distinct",
+        "repetition": 2,
+        "all_calls": {
+          "attempts": 3,
+          "completed": 3,
+          "valid": 3,
+          "measured": 3,
+          "input_tokens": 43913,
+          "cached_tokens": 37888,
+          "output_tokens": 1070,
+          "input_not_reported_reused": 6025,
+          "cache_read_percent": 86.28,
+          "duration_ms_median": 3956,
+          "first_text_ms_median": 3200
+        }
+      }
+    ],
+    "measured_probes": [
+      {
+        "factor": "key",
+        "variant": "no-key",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 3233,
+        "first_text_ms": 2944,
+        "usage": {
+          "input_tokens": 15060,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15067
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "stable-key",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 4477,
+        "first_text_ms": 4230,
+        "usage": {
+          "input_tokens": 15060,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15067
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "stable-key",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 3495,
+        "first_text_ms": 3367,
+        "usage": {
+          "input_tokens": 15060,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15067
+        }
+      },
+      {
+        "factor": "key",
+        "variant": "no-key",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 3221,
+        "first_text_ms": 3010,
+        "usage": {
+          "input_tokens": 15060,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15067
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "rewrite",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 3190,
+        "first_text_ms": 2993,
+        "usage": {
+          "input_tokens": 9768,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 9775
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "append",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 3337,
+        "first_text_ms": 3145,
+        "usage": {
+          "input_tokens": 10781,
+          "input_tokens_details": {
+            "cached_tokens": 9600,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 10788
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "append",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 4160,
+        "first_text_ms": 3937,
+        "usage": {
+          "input_tokens": 10781,
+          "input_tokens_details": {
+            "cached_tokens": 8576,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 10788
+        }
+      },
+      {
+        "factor": "policy",
+        "variant": "rewrite",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 4532,
+        "first_text_ms": 4265,
+        "usage": {
+          "input_tokens": 9768,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 7,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 9775
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "distinct",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 25797,
+        "first_text_ms": 2821,
+        "usage": {
+          "input_tokens": 13793,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 1049,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 14842
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "shared",
+        "repetition": 1,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 25311,
+        "first_text_ms": 3679,
+        "usage": {
+          "input_tokens": 14260,
+          "input_tokens_details": {
+            "cached_tokens": 8832,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 1082,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15342
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "shared",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 23704,
+        "first_text_ms": 3308,
+        "usage": {
+          "input_tokens": 14260,
+          "input_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 1006,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 15266
+        }
+      },
+      {
+        "factor": "compaction",
+        "variant": "distinct",
+        "repetition": 2,
+        "outcome": "completed",
+        "valid": true,
+        "duration_ms": 24197,
+        "first_text_ms": 3164,
+        "usage": {
+          "input_tokens": 13793,
+          "input_tokens_details": {
+            "cached_tokens": 13568,
+            "cache_write_tokens": 0
+          },
+          "output_tokens": 1056,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 14849
+        }
+      }
+    ]
+  },
+  "excluded_incomplete_workflow": {
+    "reason": "Parent command exited with signal status 143 before workflow completion. No model failure inferred.",
+    "completed_stages": 3,
+    "requests": 26,
+    "recorded_attempts": 25,
+    "unclosed_requests": 1,
+    "included_in_completed_cohorts": false,
+    "known_task_wall_ms": 184755,
+    "reported_usage": [
+      {
+        "provider": "chatgpt",
+        "model": "gpt-6.1-sol",
+        "kind": "inference",
+        "attempts": 25,
+        "completed": 25,
+        "input_tokens": 189800,
+        "cached_tokens": 38784,
+        "cache_input_tokens": 189800,
+        "cache_write_tokens": 0,
+        "input_measured": 25,
+        "output_tokens": 4135,
+        "output_measured": 25,
+        "cache_measured": 25,
+        "writes_measured": 25,
+        "cache_read_percent": 20.43,
+        "durations_ms_median": 4830,
+        "durations_ms_measured": 25,
+        "first_text_ms_median": 3751.5,
+        "first_text_ms_measured": 6,
+        "first_tool_ms_median": 4064.5,
+        "first_tool_ms_measured": 22
+      }
+    ]
+  },
+  "limitations": [
+    "Two completed persistent workflows per binary, one generated coding project. No production-traffic or tail-latency guarantee.",
+    "Binary suites ran sequentially in different scratch directories. Model actions, output lengths and service load vary.",
+    "An interrupted, slower current replicate was replaced. Complete-case estimates can have censoring bias. Its unfinished remote usage is unknown.",
+    "No-key replay can interact with implicit service cache state. Keys do not guarantee machine placement or cache retention.",
+    "Summary probe validity checks completion and absence of tool calls. Summary quality is checked only by the coding continuation workload.",
+    "No long-pause retention experiment and no live OpenAI API-key measurement. Subscription token counters do not establish money or quota savings."
+  ]
+}

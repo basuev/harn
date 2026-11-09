@@ -1,5 +1,91 @@
 # Coding workflow cache evaluation
 
+Measured on 2026-11-09 with ChatGPT subscription OAuth and `gpt-6.1-sol`.
+Aggregates, individual trials, hashes and limitations are retained in
+[cache-workflow-evaluation.json](cache-workflow-evaluation.json). Private source
+journals and logs remain under `.build/cache-workflow/`.
+
+## Observed outcome
+
+There is still no demonstrated overall performance improvement. Six complete
+coding workflows passed all 24 independent task checks. Before/after comparison
+uses eight successful tasks per binary in persistent mode. Two additional current
+resume workflows passed another eight tasks.
+
+- Before: 64.07 seconds and 54,782 input tokens not reported as reused per
+  successful task. Both compaction and local tool time are included.
+- Target: at most 57.66 seconds or 43,826 such input tokens per task, without
+  losing correctness.
+- Current: 61.70 seconds and 58,180 such input tokens per task. Observed time
+  decreased 3.70%, while non-reused reported input increased 6.20%.
+- Weighted reads increased from 3.49% to 5.26%. Total input increased 8.18%.
+  More cache reads did not produce lower total non-reused input.
+- The two time comparisons moved in opposite directions: -8.61% and +1.90%.
+  Output tokens fell 7.46%, providing another possible explanation for the
+  aggregate time difference. Cache causality is not established.
+- Descriptive task p95 was 67,553 ms before and 66,506 ms after. Eight task
+  samples per binary do not establish a tail-latency guarantee.
+
+Current resume mode measured 60.84 seconds per successful task, 1.40% below
+current persistent mode. The model made 63 requests instead of 67 and produced
+different edits and output. This does not establish a process-lifetime cache
+advantage. There is no evidence here that users need to keep harn open for cache
+performance.
+
+One additional current workflow ended externally with status 143 after three
+successful stages. It recorded 25 attempts and an open 26th request without final
+usage. It is retained separately and replaced by a fresh complete workflow.
+The interrupted replicate was slower, so censoring can bias complete-case
+comparisons. Its unfinished remote consumption remains unknown and is not
+included in claims about total experiment cost.
+
+## Mechanism results
+
+All 36 controlled calls completed and passed the protocol checks. Each variant
+has two trials with two warm-up calls and one measured probe.
+
+- Key: measured probes reported zero reads both with and without a key. Across
+  all calls, the no-key variant read 20.26% and the keyed variant read zero.
+  This does not reproduce the earlier key association. A reliable routing or
+  speed benefit has not been established for this subscription connection.
+- Policy: measured probes read 84.30% with appended snapshots and zero with
+  rewritten initial instructions. Including warm-up, non-reused input was
+  39,802 versus 57,728 tokens, a reduction of 31.05%. Both trials improved this
+  narrow metric. Probe duration medians were 3,748.5 and 3,861 ms, respectively.
+  This supports prefix preservation during a policy change, not a whole-day
+  savings claim. The appended request itself contained 1,013 more input tokens.
+- Compaction: shared-prefix probes read 30.97%, compared with 49.18% for distinct
+  summary instructions. Including warm-up, non-reused input was 51,000 versus
+  49,938 tokens. Summary duration medians were 24,507.5 and 24,997 ms, with 2,088
+  and 2,105 output tokens. The earlier large reuse advantage did not repeat.
+  Summary requests can reuse input, but an efficiency improvement is unproven.
+
+## Decisions and daily work
+
+Retain the verified policy snapshot semantics and their removal, resume and
+compaction behavior. The policy probe supports this architectural choice.
+Delta delivery is deferred because its additional semantics have no demonstrated
+end-to-end benefit in this workload. Snapshot growth should be measured on
+ordinary project-rule and catalog changes before changing this contract.
+
+The session cache key remains stable metadata sent by the adapter. Its routing
+or accounting semantics under subscription OAuth are not established by these
+experiments. Shared compaction instructions remain a
+consistent request structure, with no claim of repeatable subscription savings.
+Neither contradictory small probe is sufficient to establish a superior
+production default for keys or compaction.
+
+Users keep the existing workflow: project rules apply automatically, compaction
+preserves continuation, and sessions can be resumed. `/context` exposes reported
+reuse and timing. No warm-up inference, padding or extra manual cache action is
+part of ordinary work. Live evaluation is explicit and separate from local tests.
+
+The next performance decision should use multiple project workloads, balanced
+binary order and provider diagnostics when available. The API-key adapter needs
+its own live evaluation before an API recommendation. No OpenAI API key was
+available here. Until then, the time and input acceptance thresholds remain
+unmet. The new runner and independent grader make that failure reproducible.
+
 ## Decision and acceptance criteria
 
 The first cache change established prefix preservation and observability, but
@@ -36,13 +122,19 @@ of the user's projects. Model actions and service conditions remain variable.
 Both modes use pipes, so this comparison tests process lifetime, not terminal
 rendering or editor latency.
 
-The same workload will also run against the retained pre-change binary from
+The same workload ran against the retained pre-change binary from
 revision `88c501a`, identified by the SHA-256 in the first evaluation. The two
 binary suites run sequentially, so their comparison remains exposed to service
 drift. Model-generated edits and request counts can differ even when both pass
 the same independent checks. A lower aggregate number alone is not sufficient
 to attribute an improvement to caching. Controlled probes address narrower
 mechanisms under identical recorded histories.
+
+The primary before/after comparison uses two persistent workflows per binary.
+The current binary also has two resume workflows to check process lifetime and
+restoration separately. Baseline and current suites use different generated
+project directories. There is no long-pause or representative-production-traffic
+claim from these short isolated runs.
 
 Wall time includes model requests and local tools. Resume turn time also
 includes process startup. Compaction is charged to the complete workflow.

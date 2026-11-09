@@ -98,6 +98,11 @@ not local execution. A response with no text has no first-text measurement.
 Full per-item usage attribution remains in the successful `usage` event rather
 than being duplicated in the attempt record.
 
+Abrupt process termination can leave `request` and `cache_request` without a
+closing attempt record. Its outcome and consumption are unknown. Completed
+attempt totals do not account for an unfinished remote request after the local
+process has exited.
+
 `/context` shows the last request and session cache accounting by connection,
 model and purpose. Missing counters remain unknown. The token hit rate divides
 summed reported reads by summed inputs from attempts that report both counters.
@@ -120,6 +125,8 @@ comparisons isolate reuse, while full agent runs also include model decisions,
 instruction updates and effort changes. Do not infer daily savings from either
 one short run or API tariffs applied to a subscription. Measured results and
 acceptance targets are recorded in [cache evaluation](cache-evaluation.md).
+Independent code grading and controlled mechanism probes are described in the
+[coding workflow evaluation](cache-workflow-evaluation.md).
 
 ## Official references
 

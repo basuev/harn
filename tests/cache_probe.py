@@ -110,7 +110,9 @@ def request(wire, credentials, endpoint, timeout):
         usage = copy.deepcopy(response.get("usage") or {})
         usage.pop("attribution", None)
         result.update(usage=usage, response_id=response.get("id"), response_model=response.get("model"),
-                      service_tier=response.get("service_tier"))
+                      service_tier=response.get("service_tier"), reasoning=response.get("reasoning"),
+                      upstream_provider=response.get("provider"),
+                      prompt_cache_diagnostics=response.get("prompt_cache_diagnostics"))
         if response.get("output"):
             items = response["output"]
     result["reply"] = "".join(content(i) for i in items if i.get("role") == "assistant").strip()
