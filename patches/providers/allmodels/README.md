@@ -1,6 +1,6 @@
 # AllModels
 
-Core commit: `4aba7b2290b29902c529d678c5cb3b9a46657e7d`
+Core commit: `802b58dc2b9e24ede5725db8f5bf630f071b6f8e`
 
 Adapter revision: `1`. Apply independently of other provider patches.
 
