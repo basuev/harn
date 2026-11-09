@@ -117,7 +117,7 @@ json_t *sessions_catalog(void)
                         while (len && ((unsigned char)text[len] & 0xc0) == 0x80)
                             len--;
                     }
-                    excerpt = fmt("%.*s", (int)len, text);
+                    excerpt = fmt("%.*s%s", (int)len, text, text[len] ? "..." : "");
                 }
                 json_decref(event);
                 if (excerpt)
@@ -164,7 +164,8 @@ static void session_excerpt(const char *label, const char *text)
 void session_show(int resumed)
 {
     message("%s session: %s", resumed ? "Resumed" : "New", app.session_id);
-    message("Project: %s", app.root);
+    if (!app.tty)
+        message("Project: %s", app.root);
     if (!resumed)
         return;
     const char *first = NULL, *last = NULL;
@@ -900,9 +901,11 @@ int session_switch(const char *id)
     app.compact_requested = 0;
     app.exit_status = 0;
     session_show(id != NULL);
-    message("Provider: %s", app.connection->name);
-    message("Model: %s", app.model);
-    message("Effort: %s", app.effort);
+    if (!app.tty) {
+        message("Provider: %s", app.connection->name);
+        message("Model: %s", app.model);
+        message("Effort: %s", app.effort);
+    }
     ui_status();
     return 1;
 }

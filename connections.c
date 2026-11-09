@@ -87,6 +87,10 @@ void connection_command(const char *name)
     while (*name == ' ')
         name++;
     if (!*name) {
+        if (app.tty) {
+            linenoiseEditReplace(&app.input, "/provider ", 10);
+            return;
+        }
         ui_print("Provider: %s", app.connection->name);
         const Connection *c;
         for (size_t i = 0; (c = connection_at(i)); i++) {

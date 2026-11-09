@@ -37,9 +37,15 @@ Ordinary terminal scrollback was chosen over a full-screen interface to retain
 normal terminal habits. Markdown uses the terminal's available width rather
 than a fixed reading measure. Presentation must not change provider history,
 journal contents, or batch output. Full project paths and model names wrap
-rather than being truncated. Completion is local and keeps candidates fixed
-until the draft changes, so asynchronous output cannot silently change the
-user's selection.
+rather than being truncated. The prompt keeps provider, model, effort and live
+status together to leave more vertical space for the conversation. Session
+choices prioritize the first request over technical IDs, including in narrow
+terminals, because recognizing the task matters more than its storage identity.
+Completion is local and keeps candidates fixed until the draft changes, so
+asynchronous output cannot silently change the user's selection. Enter submits
+a selected top-level command. Selection commands then open their argument picker,
+loading model capabilities when needed, regardless of whether a catalog is cached.
+Tab only inserts a suggestion.
 
 One event loop keeps local process controls available during network requests,
 retry delays, and editor handoff. User commands and model tools share ownership

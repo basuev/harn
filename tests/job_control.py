@@ -117,7 +117,7 @@ class JobControl(unittest.TestCase):
         self.until(lambda: any(value in part.get("text", "")
                                for r in self.case.records() if r["type"] == "item"
                                for part in r["data"].get("content", []) if isinstance(part, dict)), value)
-        self.until(lambda: re.search(rb"(?:\x1b\[0K|\r\n)ctx:[^\r\n]*\r\n> ", self.output[self.output.rfind(b"model ctx:"):]))
+        self.until(lambda: re.search(rb"ctx:[^\r\n]*\r\n> ", self.output[self.output.rfind(b"model ctx:"):]))
 
     def users(self):
         return [r["data"]["content"] for r in self.case.records()

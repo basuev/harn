@@ -435,9 +435,11 @@ int main(int argc, char **argv)
         goto finish;
     }
     session_show(resume != NULL);
-    message("Provider: %s", app.connection->name);
-    message("Model: %s", app.model);
-    message("Effort: %s", app.effort);
+    if (!app.tty) {
+        message("Provider: %s", app.connection->name);
+        message("Model: %s", app.model);
+        message("Effort: %s", app.effort);
+    }
     if (file) {
         char *text = read_file(file, NULL);
         if (!text) {

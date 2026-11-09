@@ -104,6 +104,7 @@ typedef void(linenoiseFreeHintsCallback)(void *);
 void linenoiseSetCompletionCallback(linenoiseCompletionCallback *);
 typedef const char *(linenoiseCompletionDescriptionCallback)(const char *);
 void linenoiseSetCompletionDescriptionCallback(linenoiseCompletionDescriptionCallback *);
+void linenoiseSetCompletionLabelCallback(linenoiseCompletionDescriptionCallback *);
 void linenoiseSetHintsCallback(linenoiseHintsCallback *);
 void linenoiseSetFreeHintsCallback(linenoiseFreeHintsCallback *);
 void linenoiseAddCompletion(linenoiseCompletions *, const char *);

@@ -66,12 +66,77 @@ class Presentation(unittest.TestCase):
                                    for record in self.case.records() if record["type"] == "item"
                                    for part in record["data"].get("content", []) if isinstance(part, dict)))
         # The journal is committed after stream presentation. Drain the final prompt as well.
-        self.read_until(lambda: re.search(rb"(?:\x1b\[0K|\r\n)ctx:[^\r\n]*\r\n> ", self.output[self.output.rfind(b"model ctx:"):]))
+        self.read_until(lambda: re.search(rb"ctx:[^\r\n]*\r\n> ", self.output[self.output.rfind(b"model ctx:"):]))
 
     def assert_project_prompt(self, output, status):
         plain = re.sub(rb"\x1b\[[0-9;]*[A-Za-z]", b"", output)
         plain = plain.replace(b"\r", b"").replace(b"\n", b"")
-        self.assertIn(str(self.case.project).encode() + b"fixture-model medium" + status, plain)
+        self.assertIn(str(self.case.project).encode() + b"fixture/fixture-model medium " + status, plain)
+
+    def test_resume_uses_request_text_at_narrow_width_and_filters_by_content(self):
+        base = self.case.path / "state/harn/sessions"
+        for name, request in (("alpha-id", "Fix the timeout " + "Привет " * 30),
+                              ("beta-id", "Update dependencies")):
+            folder = base / name
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(json.dumps(dict(cwd=str(self.case.project),
+                                                             provider="fixture", model="fixture-model")))
+            (folder / "journal.jsonl").write_text(json.dumps(dict(type="item", data=dict(
+                role="user", content=request))) + "\n")
+        self.start(width=42)
+        self.send("/resume timeout")
+        self.read_until(lambda: b"\x1b[7mFix the timeout" in
+                        self.output[self.output.rfind(b"> /resume timeout"):])
+        view = self.output[self.output.rfind(b"> /resume timeout"):]
+        self.assertIn(b"...", view)
+        self.assertNotIn(b"\xef\xbf\xbd", view)
+        self.assertNotIn(b"Update dependencies", view)
+        self.send("\r")
+        self.read_until(lambda: b"Resumed session: alpha-id" in self.output)
+        self.assertEqual(self.case.server.requests, [])
+
+    def test_selection_commands_open_pickers_without_duplicate_lists(self):
+        self.start(width=90)
+        for command, selected in (("/provider", "fixture"), ("/model", "fixture-model"),
+                                  ("/model", "fixture-model"), ("/effort", "default")):
+            mark = len(self.output)
+            self.send(command + "\r")
+            self.read_until(lambda: ("\x1b[7m" + selected).encode() in self.output[mark:])
+            self.assertIn(("> " + command + " ").encode(), self.output[mark:])
+            self.assertNotIn(b"\r\n  fixture-model\r\n", self.output[mark:])
+            self.assertNotIn(b"Supported levels depend", self.output[mark:])
+            mark = len(self.output)
+            self.send("\x03")
+            self.read_until(lambda: b"\r\n> \r\x1b[2C" in self.output[mark:])
+        self.assertEqual(self.case.server.model_fetches, 1)
+        self.assertEqual(self.case.server.requests, [])
+
+    def assert_catalog_loading_preserves_draft(self, command):
+        self.case.server.mode = "echo"
+        self.case.server.model_delay = .5
+        self.start(width=42)
+        self.send(command + "\r")
+        self.assertTrue(self.case.server.model_waiting.wait(5))
+        self.send("\x1b[200~Keep this draft\nКириллица\x1b[201~")
+        self.read_until(lambda: any(r["type"] == "model_info" for r in self.case.records()))
+        self.send("\r")
+        self.wait_answer("OK Keep this draft")
+        self.assertEqual(self.case.server.requests[-1]["input"][-1]["content"],
+                         "Keep this draft\nКириллица")
+
+    def test_model_catalog_loading_preserves_new_draft(self):
+        self.assert_catalog_loading_preserves_draft("/model")
+
+    def test_effort_catalog_loading_preserves_new_draft(self):
+        self.assert_catalog_loading_preserves_draft("/effort")
+
+    def test_prompt_identifies_provider_and_help_explains_draft_priority(self):
+        self.start(width=140)
+        self.assertIn(b"fixture/fixture-model medium ctx:?\r\n> ", self.output)
+        self.assertNotIn(b"Provider:", self.output)
+        self.send("/help\r")
+        self.read_until(lambda: b"Ctrl-Z: suspend" in self.output)
+        self.assertIn(b"Ctrl-C: clear draft, or interrupt if empty.", self.output)
 
     def test_full_project_path_stays_in_prompt_during_inference_and_resize(self):
         # A path longer than the former prompt buffer, with wide UTF-8 characters.
@@ -112,7 +177,7 @@ class Presentation(unittest.TestCase):
         def has_model_prompt():
             plain = re.sub(rb"\x1b\[[0-9;]*[A-Za-z]", b"", self.output[mark:])
             plain = plain.replace(b"\r", b"").replace(b"\n", b"")
-            return (name + " defaultctx:").encode() in plain
+            return (name + " default ctx:").encode() in plain
         self.read_until(has_model_prompt)
         self.assertEqual(self.case.server.requests, [])
         self.assertEqual(self.case.server.model_fetches, 0)
@@ -121,7 +186,10 @@ class Presentation(unittest.TestCase):
     def load_catalog(self):
         mark = len(self.output)
         self.send("/model\r")
-        self.read_until(lambda: b"  fixture-model" in self.output[mark:])
+        self.read_until(lambda: b"\x1b[7mfixture-model" in self.output[mark:])
+        mark = len(self.output)
+        self.send("\x03")
+        self.read_until(lambda: b"\r\n> \r\x1b[2C" in self.output[mark:])
 
     def test_effort_completion_only_offers_the_selected_models_catalog_levels(self):
         self.case.server.model_metadata = dict(supported_reasoning_levels=None)
@@ -137,7 +205,7 @@ class Presentation(unittest.TestCase):
     def test_effort_picker_loads_catalog_on_first_use(self):
         self.start(width=42)
         self.send("/ef\r")
-        self.read_until(lambda: b"\x1b[7mdefault" in self.output and b"xhigh" in self.output)
+        self.read_until(lambda: b"\x1b[7mdefault" in self.output and b"1-5 of 8" in self.output)
         self.assertEqual(self.case.server.model_fetches, 1)
         self.send("hi\r")
         self.read_until(lambda: b"fixture-model high" in self.output)
@@ -157,7 +225,7 @@ class Presentation(unittest.TestCase):
             os.utime(log, ns=(1_700_000_000_000_000_000 + nanos,) * 2)
         self.start(width=140)
         self.send("/res\r")
-        self.read_until(lambda: b"\x1b[7mrecent" in self.output and b"older request" in self.output)
+        self.read_until(lambda: b"\x1b[7mrecent request" in self.output and b"older request" in self.output)
         self.assertNotIn(b"foreign", self.output)
         self.send("\x1b[B\r")
         self.read_until(lambda: b"Resumed session: older" in self.output)
@@ -244,7 +312,7 @@ class Presentation(unittest.TestCase):
         self.send("/mo")
         self.read_until(lambda: b"\x1b[7m/model" in self.output)
         self.send("\r")
-        self.read_until(lambda: b"  fixture-model" in self.output)
+        self.read_until(lambda: b"\x1b[7mfixture-model" in self.output)
         self.assertEqual(self.case.server.model_fetches, 1)
         self.assertEqual(self.case.server.requests, [])
 
@@ -267,9 +335,7 @@ class Presentation(unittest.TestCase):
         self.start(width=42)
         self.send("TASK\r")
         self.wait_answer("JOB RUNNING")
-        self.send("/jo\r")
-        self.read_until(lambda: b"> /jobs " in self.output)
-        self.send("s\r")
+        self.send("/jobs s\r")
         self.read_until(lambda: b"> /jobs stop " in self.output)
         mark = len(self.output)
         self.send("\r")
@@ -437,12 +503,12 @@ class Presentation(unittest.TestCase):
     def test_suggestion_range_adapts_to_short_terminal_without_hiding_selection(self):
         # Keep the path on one row so TMPDIR does not change the suggestion space.
         width = max(42, len(str(self.case.project).encode()) + 1)
-        self.start(width=width, height=7)
+        self.start(width=width, height=6)
         self.send("/")
         self.read_until(lambda: b"1-1 of 11" in self.output)
         self.assertIn(b"\x1b[7m/compact", self.output)
         mark = len(self.output)
-        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 6, width, 0, 0))
+        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 5, width, 0, 0))
         self.send("\x0e")
         self.read_until(lambda: b"2/11" in self.output[mark:])
         self.assertIn(b"\x1b[7m/context", self.output[mark:])
@@ -553,7 +619,7 @@ class Presentation(unittest.TestCase):
         self.assertIn(b"\x1b[2m  read a.py:", output)
         self.assertIn(b"\x1b[2m  exec #1:", output)
         self.assertNotIn(b"  CHECK PASSED\r\n", output)
-        self.assertIn(b"jobs #1 exited (0), /jobs 1", output)
+        self.assertIn(b"jobs #1 exited (0)", output)
         self.assertIn(b"\x1b[22m", output)
         self.assertNotIn(b"Answer", output)
         self.assertIn(b"ctx:<1%\r\n> ", output)

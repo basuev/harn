@@ -40,9 +40,9 @@ harn --resume
 ```
 
 Inside a running instance, `/resume` offers previous sessions in that project,
-most recently active first, with the first request as a preview. Select with
-arrows or Ctrl-N/P and press Enter. Switching stops the previous session's
-owned processes. A failed switch leaves the current session and processes intact.
+most recently active first, labeled by a preview of the first request. Filter by
+that preview or session ID, select with arrows or Ctrl-N/P and press Enter.
+Switching stops the previous session's owned processes. A failed switch leaves the current session and processes intact.
 
 `/new` starts an empty session without restarting, keeping the selected provider,
 model and effort. The previous conversation remains available through `/resume`.

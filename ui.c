@@ -18,7 +18,7 @@ static const struct {
                 {"/provider", "List or change provider"},
                 {"/quit", "Save and exit"}, {"/resume", "Choose a previous session"}, {"/skill", "List skills"}};
 static json_t *resume_choices;
-static const char *completion_description(const char *candidate)
+static const char *completion_label(const char *candidate)
 {
     if (!strncmp(candidate, "/resume ", 8)) {
         size_t i;
@@ -27,6 +27,12 @@ static const char *completion_description(const char *candidate)
             if (!strcmp(candidate + 8, jstr(session, "id")))
                 return jstr(session, "description");
     }
+    return NULL;
+}
+static const char *completion_description(const char *candidate)
+{
+    if (!strncmp(candidate, "/resume ", 8))
+        return candidate + 8;
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++)
         if (!strcmp(candidate, commands[i].name))
             return commands[i].description;
@@ -50,7 +56,8 @@ static void complete(const char *input, linenoiseCompletions *out)
         json_t *session;
         json_array_foreach(resume_choices, i, session) {
             const char *id = jstr(session, "id");
-            if (!strncmp(id, input + 8, strlen(input + 8))) {
+            if (!strncmp(id, input + 8, strlen(input + 8)) ||
+                strstr(jstr(session, "description"), input + 8)) {
                 char *candidate = fmt("/resume %s", id);
                 linenoiseAddCompletion(out, candidate);
                 free(candidate);
@@ -118,11 +125,8 @@ void ui_status(void)
                            app.busy && strcmp(app.activity, "idle") ? app.activity : "";
     snprintf(next, sizeof(next), "%s%sctx:%s%s%s", activity, *activity ? " " : "",
              context, jobs, queued);
-    if (strlen(next) + 8 > (size_t)columns())
-        snprintf(next, sizeof(next), "ctx:%s%s%s", context, jobs, queued);
-    if (strlen(next) >= (size_t)columns())
-        snprintf(next, sizeof(next), "> ");
-    char *prompt = fmt("%s\n%s %s\n%s\n> ", app.root, app.model, app.effort, next);
+    char *prompt = fmt("%s\n%s/%s %s %s\n> ", app.root, app.connection->name,
+                       app.model, app.effort, next);
     if (app.prompt && !strcmp(prompt, app.prompt)) {
         free(prompt);
         return;
@@ -437,10 +441,7 @@ void ui_exec_done(Job *job)
         json_decref(info);
     }
     if (!job->status && !job->stopped) {
-        if (app.tty)
-            ui_meta("jobs #%d exited (0), /jobs %d", job->id, job->id);
-        else
-            ui_meta("jobs #%d exited (0)", job->id);
+        ui_meta("jobs #%d exited (0)", job->id);
     } else {
         if (app.tty)
             message("jobs #%d %s (%d), /jobs %d", job->id,
@@ -610,6 +611,7 @@ void ui_init(void)
         linenoiseSetMultiLine(1);
         linenoiseSetCompletionCallback(complete);
         linenoiseSetCompletionDescriptionCallback(completion_description);
+        linenoiseSetCompletionLabelCallback(completion_label);
         char *p = fmt("%s/input-history", app.state_dir);
         linenoiseHistoryLoad(p);
         free(p);
@@ -682,7 +684,8 @@ void ui_command(char *line)
                  "/compact          Summarize earlier history\n"
                  "/quit             Save and exit\n"
                  "/help             Show commands\n"
-                 "Ctrl-C: interrupt. Ctrl-D: exit. Ctrl-G: editor.\n"
+                 "Ctrl-C: clear draft, or interrupt if empty.\n"
+                 "Ctrl-D: exit. Ctrl-G: editor.\n"
                  "Alt-Backspace/Ctrl-W: delete word. Ctrl-N/P: suggestions or history.\n"
                  "Tab: insert suggestion. Enter: next argument or submit. Escape: dismiss.\n"
                  "Ctrl-Z: suspend. Use fg in the shell to resume.");
@@ -749,13 +752,16 @@ void ui_command(char *line)
                 return;
         }
         if (!*value) {
-            ui_print("Effort: %s", app.effort);
-            const char *level;
-            for (size_t i = 0; (level = effort_at(i)); i++)
-                ui_print("  %s", level);
-            ui_print("Supported levels depend on the model. default leaves effort to the provider.");
-            if (app.tty && !app.busy)
-                linenoiseEditReplace(&app.input, "/effort ", 8);
+            if (app.tty) {
+                if (!app.input.len)
+                    linenoiseEditReplace(&app.input, "/effort ", 8);
+            } else {
+                ui_print("Effort: %s", app.effort);
+                const char *level;
+                for (size_t i = 0; (level = effort_at(i)); i++)
+                    ui_print("  %s", level);
+                ui_print("Supported levels depend on the model. default leaves effort to the provider.");
+            }
         } else if (app.busy)
             message("Interrupt the current turn before changing the effort");
         else if (!effort_supported(value))
@@ -770,15 +776,19 @@ void ui_command(char *line)
         while (*s == ' ')
             s++;
         if (!*s) {
-            if (app.busy)
-                models_show();
-            else {
+            if (!app.busy && (!app.tty || !app.models)) {
                 app.busy = 1;
                 app.cancel = 0;
-                models_list(1);
+                models_list(!app.tty);
                 app.busy = 0;
                 app.cancel = 0;
-            }
+            } else if (!app.tty)
+                models_show();
+            if (app.tty && app.models) {
+                if (!app.input.len)
+                    linenoiseEditReplace(&app.input, "/model ", 7);
+            } else if (app.tty && app.busy)
+                message("Model list is not loaded yet");
         } else if (app.busy)
             message("Interrupt the current turn before changing the model");
         else {

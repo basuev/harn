@@ -1706,7 +1706,7 @@ class Checks(unittest.TestCase):
         p = Process(self)
         try:
             p.send("/help")
-            p.wait("Ctrl-C: interrupt.")
+            p.wait("Ctrl-C: clear draft, or interrupt if empty.")
             commands = set(line.split()[0].decode() for line in p.buffer.splitlines() if line.startswith(b"/"))
             self.assertEqual(commands, {"/jobs", "/context", "/provider", "/model", "/effort", "/new", "/resume", "/skill", "/compact", "/quit", "/help"})
             removed = ["/continue", "/models", "/skills", "/sessions", "/login", "/logout",

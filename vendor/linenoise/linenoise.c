@@ -717,6 +717,11 @@ static void freeCompletions(linenoiseCompletions *lc) {
 static linenoiseCompletions suggestions;
 static char *suggestion_input;
 static linenoiseCompletionDescriptionCallback *completionDescriptionCallback;
+static linenoiseCompletionDescriptionCallback *completionLabelCallback;
+
+void linenoiseSetCompletionLabelCallback(linenoiseCompletionDescriptionCallback *fn) {
+    completionLabelCallback = fn;
+}
 
 void linenoiseSetCompletionDescriptionCallback(linenoiseCompletionDescriptionCallback *fn) {
     completionDescriptionCallback = fn;
@@ -1230,6 +1235,31 @@ static void refreshSingleLine(struct linenoiseState *l, int flags) {
     free(render);
 }
 
+/* Clip by terminal cells, keeping UTF-8 intact and making omissions visible. */
+static size_t appendClipped(struct abuf *out, const char *text, size_t width) {
+    size_t len = strlen(text), total = 0;
+    for (size_t p = 0; p < len;) {
+        size_t n = utf8NextCharLen(text,p,len);
+        int w = utf8SingleCharWidth(text+p,n);
+        if (w > 0) total += (size_t)w;
+        p += n;
+    }
+    size_t limit = total > width && width >= 3 ? width-3 : width, used = 0;
+    for (size_t p = 0; p < len;) {
+        size_t n = utf8NextCharLen(text,p,len);
+        int w = utf8SingleCharWidth(text+p,n);
+        if (w < 0 || used+(size_t)w > limit) break;
+        abAppend(out,text+p,n);
+        used += (size_t)w;
+        p += n;
+    }
+    if (total > width && width >= 3) {
+        abAppend(out,"...",3);
+        used += 3;
+    }
+    return used;
+}
+
 /* Multi line low level line refresh.
  *
  * Rewrite the currently edited line accordingly to the buffer content,
@@ -1322,6 +1352,8 @@ static void refreshMultiLine(struct linenoiseState *l, int flags) {
             const char *candidate = suggestions.cvec[i];
             const char *label = strchr(l->buf,' ') ? strchr(candidate,' ') : NULL;
             label = label && label[1] ? label+1 : candidate;
+            const char *display = completionLabelCallback ? completionLabelCallback(candidate) : NULL;
+            if (display) label = display;
             const char *description = completionDescriptionCallback
                                           ? completionDescriptionCallback(candidate) : NULL;
             abAppend(&layout,"\r\n  ",4);
@@ -1330,18 +1362,11 @@ static void refreshMultiLine(struct linenoiseState *l, int flags) {
             size_t marker = footer ? 0 : strlen(position);
             if (marker > width) marker = width;
             width -= marker;
-            for (size_t p = 0, len = strlen(label); p < len;) {
-                size_t n = utf8NextCharLen(label,p,len);
-                int w = utf8SingleCharWidth(label+p,n);
-                if (w < 0 || used+(size_t)w > width) break;
-                abAppend(&layout,label+p,n);
-                used += (size_t)w;
-                p += n;
-            }
+            used = appendClipped(&layout,label,width);
             size_t padding = used < 14 ? 14-used : 4;
-            if (description && l->cols >= 64 && used+padding+strlen(description) <= width) {
+            if (description && l->cols >= 64 && used+padding < width) {
                 for (size_t p = 0; p < padding; p++) abAppend(&layout," ",1);
-                abAppend(&layout,description,strlen(description));
+                appendClipped(&layout,description,width-used-padding);
             }
             if (i == l->completion_idx) abAppend(&layout,"\x1b[27m",5);
             if (marker) abAppend(&layout,position,marker);
@@ -1993,15 +2018,11 @@ char *linenoiseEditFeed(struct linenoiseState *l) {
             if (!choice) return linenoiseEditMore;
             memcpy(choice,selected,len+1);
             size_t more = 0;
-            if (c == ENTER) {
-                size_t end = len;
-                if (!end || choice[end-1] != ' ') choice[end++] = ' ';
-                choice[end] = 0;
+            if (c == ENTER && len && choice[len-1] == ' ') {
                 linenoiseCompletions following = {0};
                 completionCallback(choice,&following);
                 more = following.len;
                 freeCompletions(&following);
-                if (!more) choice[len] = 0;
             }
             linenoiseEditReplace(l,choice,strlen(choice));
             free(choice);

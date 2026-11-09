@@ -275,7 +275,8 @@ def main():
         t.send("/help")
         t.observe("commands")
         t.send("/model")
-        t.observe("model-list")
+        t.observe("model-picker")
+        t.key("Control", "c")
         assert "KEEP_ME" in (case.session() / "summary.txt").read_text()
         log = (artifacts / "status.log").read_text()
         assert "ctx:?" in log
@@ -491,6 +492,39 @@ def main():
             t.key("Control", "d")
             assert t.window.wait(timeout=5) == 0
             results["markdown_and_full_width_" + str(width)] = True
+            t.close()
+            terminal = None
+            case.tearDown()
+            case = None
+        for width in (42, 90, 140):
+            case = Checks()
+            case.setUp()
+            case.server.mode = "echo"
+            saved = case.path / "state/harn/sessions/previous-task"
+            saved.mkdir(parents=True)
+            (saved / "meta.json").write_text(json.dumps(dict(cwd=str(case.project),
+                provider="fixture", model="fixture-model")))
+            (saved / "journal.jsonl").write_text(json.dumps(dict(type="item", data=dict(
+                role="user", content="Fix timeout " + "Привет " * 30))) + "\n")
+            terminal = t = Terminal(case, env, artifacts, "pickers-" + str(width),
+                                   "vim -Nu NONE -n -i NONE --noplugin", width=width)
+            t.text("/resume timeout")
+            t.observe("session-request-label")
+            for command in ("model", "effort", "provider"):
+                t.key("Control", "c")
+                t.send("/" + command)
+                t.observe(command + "-picker")
+            log = (artifacts / ("pickers-" + str(width) + ".log")).read_text()
+            assert "Fix timeout" in log
+            if width == 42:
+                assert "..." in log
+            assert "fixture/fixture-model" in log
+            assert case.server.requests == []
+            assert case.server.model_fetches == 1
+            t.key("Control", "c")
+            t.key("Control", "d")
+            assert t.window.wait(timeout=5) == 0
+            results["request_labels_and_consistent_pickers_" + str(width)] = True
             t.close()
             terminal = None
             case.tearDown()
