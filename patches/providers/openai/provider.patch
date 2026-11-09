@@ -1,0 +1,140 @@
+diff --git a/providers/openai/check.py b/providers/openai/check.py
+new file mode 100644
+index 0000000..4f82ac5
+--- /dev/null
++++ b/providers/openai/check.py
+@@ -0,0 +1,35 @@
++#!/usr/bin/env python3
++"""OpenAI API contract and modern cache controls, without real API credentials."""
++from pathlib import Path
++import sys
++import unittest
++
++sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
++import check
++from provider_contract import Contract, run
++
++
++class OpenAICacheTests(unittest.TestCase):
++    setUp = Contract.setUp
++    tearDown = Contract.tearDown
++    run_batch = check.Checks.run_batch
++    session = check.Checks.session
++    records = check.Checks.records
++
++    def test_sol_api_enables_cache_options_and_effort_updates(self):
++        self.server.model_id = "gpt-6.1-sol"
++        self.server.mode = "echo"
++        self.run_batch("FIRST", "-m", "gpt-6.1-sol", "--effort", "low")
++        first = self.server.requests[-1]
++        self.assertEqual(first["prompt_cache_options"], dict(mode="implicit", ttl="30m"))
++        self.assertNotIn("instructions", first)
++        self.run_batch("SECOND", "--resume", "--effort", "high")
++        second = self.server.requests[-1]
++        self.assertEqual(second["reasoning"], dict(effort="low"))
++        self.assertTrue(any(i.get("type") == "configuration_update" and
++                            i["reasoning"]["effort"] == "high" for i in second["input"]))
++        self.assertEqual(check.Checks.saved_requests(self), self.server.requests)
++
++
++if __name__ == "__main__":
++    run("openai", key_env="OPENAI_API_KEY", extra=(OpenAICacheTests,))
+diff --git a/providers/openai/config.example.h b/providers/openai/config.example.h
+new file mode 100644
+index 0000000..635bd92
+--- /dev/null
++++ b/providers/openai/config.example.h
+@@ -0,0 +1,14 @@
++#ifdef CONFIG_CONNECTIONS
++#undef CONFIG_CONNECTIONS
++#define OPENAI_CONNECTIONS
++#endif
++#include "config.def.h"
++#undef DEFAULT_PROVIDER
++#define DEFAULT_PROVIDER "openai"
++#ifdef OPENAI_CONNECTIONS
++#include "providers/openai/provider.h"
++static const Connection connections[] = {
++    {"openai", "https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-6.1-sol", &openai_provider},
++    {0},
++};
++#endif
+diff --git a/providers/openai/provider.c b/providers/openai/provider.c
+new file mode 100644
+index 0000000..65f6f61
+--- /dev/null
++++ b/providers/openai/provider.c
+@@ -0,0 +1,38 @@
++#include "harn.h"
++#include "provider.h"
++#include <string.h>
++
++#ifndef OPENAI_PROMPT_CACHE_TTL
++#define OPENAI_PROMPT_CACHE_TTL "30m"
++#endif
++#ifndef OPENAI_STATIC_CACHE_TTL
++#define OPENAI_STATIC_CACHE_TTL "30m"
++#endif
++
++static json_t *openai_catalog(json_t *body)
++{
++    json_t *models = catalog_data(body), *model;
++    size_t i;
++    json_array_foreach(models, i, model) {
++        /* Confirmed API capabilities, not guesses based on a model-name prefix.
++         * Other catalog entries retain their server-reported metadata. */
++        if (!strcmp(jstr(model, "slug"), "gpt-6.1-sol")) {
++            json_object_set_new(model, "context_window", json_integer(1050000));
++            json_object_set_new(model, "supported_reasoning_levels",
++                                json_pack("[s,s,s,s,s]", "low", "medium", "high", "xhigh", "max"));
++            json_object_set_new(model, "default_reasoning_level", json_string("medium"));
++            json_object_set_new(model, "supports_reasoning_effort_updates", json_true());
++            json_object_set_new(model, "prompt_cache", json_pack("{s:s,s:s,s:b}",
++                "ttl", OPENAI_PROMPT_CACHE_TTL, "static_ttl", OPENAI_STATIC_CACHE_TTL,
++                "diagnostics", 1));
++        }
++    }
++    return models;
++}
++const Provider openai_provider = {
++    .id = "openai", .revision = "1", .auth_label = "API key",
++    .request_path = "/responses", .ready = api_key_ready, .logout = api_key_logout,
++    .models = responses_models, .catalog = openai_catalog, .headers = bearer_headers,
++    .encode = responses_cached_encode, .event = responses_event,
++    .legacy = api_key_legacy,
++};
+diff --git a/providers/openai/provider.h b/providers/openai/provider.h
+new file mode 100644
+index 0000000..6e7542c
+--- /dev/null
++++ b/providers/openai/provider.h
+@@ -0,0 +1,4 @@
++#ifndef HARN_OPENAI_PROVIDER_H
++#define HARN_OPENAI_PROVIDER_H
++extern const Provider openai_provider;
++#endif
+diff --git a/providers/openai/test-config.h b/providers/openai/test-config.h
+new file mode 100644
+index 0000000..59bd90b
+--- /dev/null
++++ b/providers/openai/test-config.h
+@@ -0,0 +1,19 @@
++#ifdef CONFIG_CONNECTIONS
++#undef CONFIG_CONNECTIONS
++#define OPENAI_TEST_CONNECTIONS
++#endif
++#include "config.def.h"
++#undef DEFAULT_PROVIDER
++#define DEFAULT_PROVIDER "openai"
++#undef DEFAULT_EFFORT
++#define DEFAULT_EFFORT "medium"
++#ifdef OPENAI_TEST_CONNECTIONS
++#include "providers/openai/provider.h"
++#include "tests/fixture.h"
++static const Connection connections[] = {
++    {"openai", "http://fixture.invalid/v1", "OPENAI_API_KEY", "fixture-model", &openai_provider},
++    {"fixture-key", "http://second.fixture.invalid/v1", "HARN_SECOND_KEY",
++     "fixture-model", &fixture_provider},
++    {0},
++};
++#endif

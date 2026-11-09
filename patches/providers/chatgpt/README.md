@@ -1,8 +1,8 @@
 # ChatGPT subscription
 
-Core commit: `3b89ab329f7e09b25d12f9b769ff1a09ac781bb1`
+Core commit: `4aba7b2290b29902c529d678c5cb3b9a46657e7d`
 
-Adapter revision: `1`. Apply independently of other provider patches.
+Adapter revision: `2`. Apply independently of other provider patches.
 
 ## Install
 
@@ -55,5 +55,12 @@ python3 providers/chatgpt/check.py
 
 This builds and installs a fixture configuration in `.build/`, then tests the
 installed binary against local HTTP/PTY fixtures. It does not use your account
-or call the real service. Live service verification has not been performed for
-this extraction. See [the shared contract](../../../docs/provider-patches.md).
+or call the real service. Live verification on 2026-11-09 used subscription OAuth with `gpt-6.1-sol`: read-tool round-trips, stateless continuation, session resume and compaction followed by continuation. See [the shared contract](../../../docs/provider-patches.md).
+
+## Prompt caching
+
+A stable key is preserved across a session and its resumes. Subscription inference
+currently rejects API TTL, breakpoint, diagnostics and configuration-update
+fields, even when the generic catalog advertises effort updates. The adapter
+therefore uses subscription-confirmed capabilities. See [prompt caching](../../../docs/prompt-caching.md)
+and [measured results](../../../docs/cache-evaluation.md).
