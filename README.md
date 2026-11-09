@@ -71,6 +71,9 @@ Project skills override personal skills. At either level, `.harn` overrides
 
 See [DESIGN.md](DESIGN.md) for architectural decisions and
 [provider patches](docs/provider-patches.md) for the adapter contract and installation.
+`/context` includes reported cache reads, write counters and request latency.
+See [prompt caching](docs/prompt-caching.md) for connection capabilities and
+[measured comparisons](docs/cache-evaluation.md).
 
 ## Checks
 

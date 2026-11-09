@@ -71,7 +71,9 @@ def main():
             installed = prefix / "bin/harn"
             output = run([str(installed), "--version"], source, dict(env, PATH="/nonexistent"), capture_output=True).stdout
             for name in names:
-                assert (name + "@1").encode() in output, output
+                readme = (ROOT / "patches/providers" / name / "README.md").read_text()
+                revision = re.search(r"Adapter revision: `(\d+)`", readme).group(1)
+                assert (name + "@" + revision).encode() in output, output
             if not names:
                 assert len(output.splitlines()) == 1, output
                 assert not (source / "providers").exists()

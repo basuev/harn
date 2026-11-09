@@ -96,6 +96,11 @@ json_t *catalog_data(json_t *catalog)
             json_object_set(model, "context_window", window);
         json_object_set(model, "supported_reasoning_levels",
                         json_object_get(entry, "supported_reasoning_levels"));
+        const char *fields[] = {"default_reasoning_level", "supports_reasoning_effort_updates",
+                                "prompt_cache"};
+        for (size_t k = 0; k < sizeof(fields) / sizeof(*fields); k++)
+            if (json_object_get(entry, fields[k]))
+                json_object_set(model, fields[k], json_object_get(entry, fields[k]));
         json_array_append_new(models, model);
     }
     return models;

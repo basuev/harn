@@ -29,6 +29,21 @@ def text(value):
                 content=[dict(type="output_text", text=value, annotations=[])])
 
 
+def content_text(item):
+    value = item.get("content", "")
+    return value if isinstance(value, str) else "".join(p.get("text", "") for p in value)
+
+
+def policy_text(request):
+    snapshots = [content_text(i) for i in request["input"]
+                 if i.get("role") == "developer" and content_text(i).startswith("Current harn policy snapshot:")]
+    return snapshots[-1] if snapshots else request.get("instructions", "")
+
+
+def is_compaction(request):
+    return request.get("tool_choice") == "none"
+
+
 class Fixture(http.server.ThreadingHTTPServer):
     daemon_threads = True
     def __init__(self, handler=None):
@@ -143,6 +158,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
+        for name, value in getattr(s, "response_headers", {}).items():
+            self.send_header(name, value)
         self.end_headers()
         try:
             if mode == "partial":
@@ -153,7 +170,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             last = users[-1] if users else ""
             outputs = [x for x in inputs if x.get("type") == "function_call_output"]
             results = {x["call_id"]: json.loads(x["output"]) if x["output"].startswith(("{", "[")) else x["output"] for x in outputs}
-            if request["instructions"].startswith("Summarize"):
+            if is_compaction(request):
                 output = [text("Goal: preserve KEEP_ME and NEVER_DELETE. Completed tools remain completed. User stopped job #1. Resume by inspecting current state.")]
             elif mode == "plan":
                 check = s.plan_checks.get(s.plan_index)
@@ -201,7 +218,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     assert not results["page2"]["truncated"]
                     output = [text("PAGING COMPLETE")]
             elif mode in ("skill", "skill-auto"):
-                catalog = json.loads(request["instructions"].rsplit("\n", 1)[-1]) if "Available skills (name, description, path):" in request["instructions"] else {}
+                catalog = json.loads(policy_text(request).rsplit("\n", 1)[-1]) if "Available skills (name, description, path):" in policy_text(request) else {}
                 pinned = [x["content"] for x in inputs if x.get("role") == "developer" and isinstance(x.get("content"), str) and x["content"].startswith("Active skill ")]
                 ident = "skill-load-" + str(len(users))
                 if last.startswith("PARTIAL SKILL") and "partial-skill" not in results:
@@ -233,8 +250,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not outputs:
                     output = [call("write", dict(path="AGENTS.md", content="TOOL_UPDATED_POLICY"), "instructions")]
                 else:
-                    assert "TOOL_UPDATED_POLICY" in request["instructions"]
-                    assert "ORIGINAL_POLICY" not in request["instructions"]
+                    assert "TOOL_UPDATED_POLICY" in policy_text(request)
+                    assert "ORIGINAL_POLICY" not in policy_text(request)
                     output = [text("OK UPDATED INSTRUCTIONS")]
             elif mode == "two-jobs":
                 if not outputs:
@@ -322,6 +339,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 for index, item in enumerate(output):
                     self.event(dict(type="response.output_item.done", output_index=index, item=item))
             response = dict(status="completed", output=output if s.completed_only else [], usage=s.usage)
+            response.update(getattr(s, "response_metadata", {}))
             if s.response_reasoning is not None:
                 response["reasoning"] = s.response_reasoning
             self.event(dict(type="response.completed", response=response))
@@ -431,7 +449,7 @@ class Checks(unittest.TestCase):
         p = subprocess.run([str(BINARY), "-C", str(self.project), *getattr(self, "startup_args", ()), "--resume"], env=self.env,
                            input="/context\n/quit\n", capture_output=True, text=True, timeout=5)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(len(p.stdout.splitlines()), 3, p.stdout)
+        self.assertGreaterEqual(len(p.stdout.splitlines()), 3, p.stdout)
         return p.stdout
 
     def saved_requests(self):
@@ -463,14 +481,14 @@ class Checks(unittest.TestCase):
         return path
 
     def catalog(self, request=None):
-        instructions = (request or self.server.requests[-1])["instructions"]
+        instructions = policy_text(request or self.server.requests[-1])
         return json.loads(instructions.rsplit("\n", 1)[-1]) if "Available skills (name, description, path):" in instructions else {}
 
     def selected_skills(self, request=None):
         selected = []
         for item in (request or self.server.requests[-1])["input"]:
             parts = item.get("content")
-            if item.get("role") == "developer" and isinstance(parts, list):
+            if item.get("role") == "developer" and isinstance(parts, list) and parts[0]["text"].startswith("{"):
                 metadata = json.loads(parts[0]["text"])
                 if metadata.get("user_selected"):
                     selected.append((metadata, parts[1]["text"]))
@@ -638,7 +656,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(catalog["fixture-skill"]["path"], str(project))
         self.assertEqual(catalog["fixture-skill"]["description"], "Project description")
         for body in ("USER_BODY_ONLY", "SECOND_BODY_ONLY", "PROJECT_BODY_ONLY"):
-            self.assertNotIn(body, self.server.requests[0]["instructions"])
+            self.assertNotIn(body, policy_text(self.server.requests[0]))
         self.assertEqual([r for r in self.records() if r["type"] == "skill"], [])
 
     def test_skill_catalog_merges_agents_and_harn_with_scoped_precedence(self):
@@ -666,7 +684,7 @@ class Checks(unittest.TestCase):
             if index:
                 self.run_batch("REFRESH SKILL PRIORITY " + str(index), "--resume")
             self.assertEqual(self.catalog()["shared"]["path"], str(path))
-            self.assertNotIn("FULL_SKILL_SENTINEL", self.server.requests[-1]["instructions"])
+            self.assertNotIn("FULL_SKILL_SENTINEL", policy_text(self.server.requests[-1]))
             path.unlink()
         self.run_batch("ALL SHARED SKILLS REMOVED", "--resume")
         self.assertNotIn("shared", self.catalog())
@@ -706,7 +724,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(set(self.catalog()), {"fixture-skill"})
         self.assertEqual(self.catalog()["fixture-skill"]["description"], "First line with Unicode: кириллица")
         self.assertIn(b"Cannot load skill", result.stderr)
-        self.assertNotIn("UNLOADED_BODY", self.server.requests[0]["instructions"])
+        self.assertNotIn("UNLOADED_BODY", policy_text(self.server.requests[0]))
 
     def test_skill_activation_reads_full_text_and_records_original_request(self):
         self.server.mode = "skill"
@@ -719,7 +737,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["path"], str(path))
         self.assertEqual(self.saved_requests(), self.server.requests)
-        self.assertNotIn("FULL_SKILL_SENTINEL", self.server.requests[0]["instructions"])
+        self.assertNotIn("FULL_SKILL_SENTINEL", policy_text(self.server.requests[0]))
         outputs = [x for x in self.server.requests[1]["input"] if x.get("type") == "function_call_output"]
         read = json.loads(outputs[-1]["output"])
         self.assertEqual(read["content"], self.server.skill_content)
@@ -917,21 +935,21 @@ class Checks(unittest.TestCase):
         try:
             p.send("FIRST POLICY")
             p.wait("OK FIRST POLICY")
-            self.assertIn("ORIGINAL_POLICY", self.server.requests[-1]["instructions"])
+            self.assertIn("ORIGINAL_POLICY", policy_text(self.server.requests[-1]))
             path.write_text("REVISED_POLICY")
             p.send("SECOND POLICY")
             p.wait("OK SECOND POLICY")
-            current = self.server.requests[-1]["instructions"]
+            current = policy_text(self.server.requests[-1])
             self.assertIn("REVISED_POLICY", current)
             self.assertNotIn("ORIGINAL_POLICY", current)
             path.unlink()
             p.send("REMOVED POLICY")
             p.wait("OK REMOVED POLICY")
-            self.assertNotIn("Project instructions from AGENTS.md", self.server.requests[-1]["instructions"])
+            self.assertNotIn("Project instructions from AGENTS.md", policy_text(self.server.requests[-1]))
             path.write_text("NEW_POLICY")
             p.send("NEW POLICY")
             p.wait("OK NEW POLICY")
-            self.assertIn("NEW_POLICY", self.server.requests[-1]["instructions"])
+            self.assertIn("NEW_POLICY", policy_text(self.server.requests[-1]))
             self.assertEqual(self.saved_requests(), self.server.requests)
         finally:
             p.finish()
@@ -952,22 +970,22 @@ class Checks(unittest.TestCase):
             current.write_text("HARN_GLOBAL_FIRST_946")
             p.send("CREATED CONFIG INSTRUCTIONS")
             p.wait("OK CREATED CONFIG INSTRUCTIONS")
-            self.assertIn("HARN_GLOBAL_FIRST_946", self.server.requests[-1]["instructions"])
+            self.assertIn("HARN_GLOBAL_FIRST_946", policy_text(self.server.requests[-1]))
             current.write_text("HARN_GLOBAL_REVISED_512")
             p.send("REVISED CONFIG INSTRUCTIONS")
             p.wait("OK REVISED CONFIG INSTRUCTIONS")
-            self.assertIn("HARN_GLOBAL_REVISED_512", self.server.requests[-1]["instructions"])
-            self.assertNotIn("HARN_GLOBAL_FIRST_946", self.server.requests[-1]["instructions"])
+            self.assertIn("HARN_GLOBAL_REVISED_512", policy_text(self.server.requests[-1]))
+            self.assertNotIn("HARN_GLOBAL_FIRST_946", policy_text(self.server.requests[-1]))
         finally:
             p.finish()
         self.run_batch("RESUMED CONFIG INSTRUCTIONS", "--resume")
-        self.assertIn("HARN_GLOBAL_REVISED_512", self.server.requests[-1]["instructions"])
+        self.assertIn("HARN_GLOBAL_REVISED_512", policy_text(self.server.requests[-1]))
         current.unlink()
         self.run_batch("REMOVED CONFIG INSTRUCTIONS", "--resume")
-        self.assertNotIn("HARN_GLOBAL_REVISED_512", self.server.requests[-1]["instructions"])
+        self.assertNotIn("HARN_GLOBAL_REVISED_512", policy_text(self.server.requests[-1]))
         for request in self.server.requests:
-            self.assertNotIn("IGNORED_AGENTS_GLOBAL_318", request["instructions"])
-            self.assertNotIn("IGNORED_HOME_GLOBAL_627", request["instructions"])
+            self.assertNotIn("IGNORED_AGENTS_GLOBAL_318", policy_text(request))
+            self.assertNotIn("IGNORED_HOME_GLOBAL_627", policy_text(request))
         self.assertEqual(self.saved_requests(), self.server.requests)
 
     def test_global_instructions_default_to_home_config_when_xdg_is_unset_or_empty(self):
@@ -983,7 +1001,7 @@ class Checks(unittest.TestCase):
                 else:
                     self.env["XDG_CONFIG_HOME"] = value
                 self.run_batch("DEFAULT CONFIG INSTRUCTIONS")
-                self.assertIn("HOME_CONFIG_GLOBAL_753", self.server.requests[-1]["instructions"])
+                self.assertIn("HOME_CONFIG_GLOBAL_753", policy_text(self.server.requests[-1]))
                 sources = [r["data"] for r in self.records() if r["type"] == "instructions"][-1]
                 self.assertEqual(sources["global"]["path"], str(global_file))
 
@@ -1003,7 +1021,7 @@ class Checks(unittest.TestCase):
         (self.path / "AGENTS.md").write_text("PARENT_RULE_728")
         (self.project / "AGENTS.md").write_text("PROJECT_RULE_349")
         self.run_batch("CHECK INSTRUCTION CHAIN")
-        instructions = self.server.requests[0]["instructions"]
+        instructions = policy_text(self.server.requests[0])
         self.assertLess(instructions.index("GLOBAL_RULE_591"), instructions.index("PARENT_RULE_728"))
         self.assertLess(instructions.index("PARENT_RULE_728"), instructions.index("PROJECT_RULE_349"))
         sources = [r["data"] for r in self.records() if r["type"] == "instructions"][-1]
@@ -1020,7 +1038,7 @@ class Checks(unittest.TestCase):
         shared = self.config / "AGENTS.md"
         shared.symlink_to(existing)
         self.run_batch("SHARED GLOBAL RULES")
-        self.assertIn("SHARED_GLOBAL_RULE_369", self.server.requests[0]["instructions"])
+        self.assertIn("SHARED_GLOBAL_RULE_369", policy_text(self.server.requests[0]))
         sources = [r["data"] for r in self.records() if r["type"] == "instructions"][-1]
         self.assertEqual(sources["global"]["path"], str(shared))
 
@@ -1039,7 +1057,7 @@ class Checks(unittest.TestCase):
         ]
         result = self.run_batch("VISIT PERSONAL AND ALIASED RULES")
         for request in self.server.requests:
-            self.assertEqual(request["instructions"].count("ONE_GLOBAL_SOURCE_731"), 1)
+            self.assertEqual(policy_text(request).count("ONE_GLOBAL_SOURCE_731"), 1)
         sources = [r["data"] for r in self.records() if r["type"] == "instructions"][-1]
         self.assertIn("global", sources)
         self.assertNotIn(str(global_file.parent), sources)
@@ -1058,10 +1076,10 @@ class Checks(unittest.TestCase):
         self.server.mode = "plan"
         self.server.tool_plan = [[call("read", dict(path="frontend/app.txt"), "front-read")]]
         self.run_batch("READ FRONTEND")
-        self.assertNotIn("FRONTEND_ONLY_438", self.server.requests[0]["instructions"])
-        self.assertIn("FRONTEND_ONLY_438", self.server.requests[1]["instructions"])
-        self.assertIn("Scope: " + str(front), self.server.requests[1]["instructions"])
-        self.assertNotIn("BACKEND_ONLY_749", self.server.requests[1]["instructions"])
+        self.assertNotIn("FRONTEND_ONLY_438", policy_text(self.server.requests[0]))
+        self.assertIn("FRONTEND_ONLY_438", policy_text(self.server.requests[1]))
+        self.assertIn("Scope: " + str(front), policy_text(self.server.requests[1]))
+        self.assertNotIn("BACKEND_ONLY_749", policy_text(self.server.requests[1]))
 
     def test_new_nested_rules_hold_write_before_touching_the_file_or_creating_parents(self):
         front = self.project / "frontend"
@@ -1074,7 +1092,7 @@ class Checks(unittest.TestCase):
         def before_retry(request, results):
             self.assertTrue(results["stale-write"]["instructions_changed"])
             self.assertFalse((front / "new").exists())
-            self.assertIn("Use the revised content", request["instructions"])
+            self.assertIn("Use the revised content", policy_text(request))
         self.server.plan_checks[1] = before_retry
         self.run_batch("WRITE AFTER LEARNING RULES")
         self.assertEqual((front / "new/deep/note.txt").read_text(), "revised")
@@ -1136,7 +1154,7 @@ class Checks(unittest.TestCase):
             self.assertTrue(results["alias-old"]["instructions_changed"])
             self.assertEqual(target.read_text(), "before")
             self.assertFalse((external / "new").exists())
-            self.assertIn("ACTUAL_DESTINATION_RULE_624", request["instructions"])
+            self.assertIn("ACTUAL_DESTINATION_RULE_624", policy_text(request))
         self.server.plan_checks[1] = before_retry
         self.run_batch("SYMLINK DESTINATION")
         self.assertTrue((self.project / "link.txt").is_symlink())
@@ -1150,12 +1168,12 @@ class Checks(unittest.TestCase):
         self.server.tool_plan = [[call("write", dict(path="a.py", content="stale"), "old")],
                                  [call("write", dict(path="a.py", content="fresh"), "new")]]
         def change_during_request(request, results):
-            self.assertIn("ORIGINAL_IN_FLIGHT_POLICY_174", request["instructions"])
+            self.assertIn("ORIGINAL_IN_FLIGHT_POLICY_174", policy_text(request))
             policy.write_text("REVISED_IN_FLIGHT_POLICY_672")
         def before_retry(request, results):
             self.assertTrue(results["old"]["instructions_changed"])
             self.assertEqual((self.project / "a.py").read_text(), "answer = 1\n")
-            self.assertIn("REVISED_IN_FLIGHT_POLICY_672", request["instructions"])
+            self.assertIn("REVISED_IN_FLIGHT_POLICY_672", policy_text(request))
         self.server.plan_checks = {0: change_during_request, 1: before_retry}
         self.run_batch("CONCURRENT POLICY UPDATE")
         self.assertEqual((self.project / "a.py").read_text(), "fresh")
@@ -1170,7 +1188,7 @@ class Checks(unittest.TestCase):
                                  [call("write", dict(path="other.txt", content="allowed"), "other")]]
         def inspect_error(request, results):
             self.assertIn("error", results["unreadable"])
-            self.assertIn("Instructions unavailable", request["instructions"])
+            self.assertIn("Instructions unavailable", policy_text(request))
         self.server.plan_checks[1] = inspect_error
         self.run_batch("UNREADABLE SUBDIRECTORY")
         self.assertEqual((self.project / "other.txt").read_text(), "allowed")
@@ -1188,11 +1206,11 @@ class Checks(unittest.TestCase):
         self.server.mode = "echo"
         policy.write_text("UPDATED_NESTED_POLICY_428")
         self.run_batch("RESUME WITH CURRENT RULES", "--resume")
-        self.assertIn("UPDATED_NESTED_POLICY_428", self.server.requests[-1]["instructions"])
-        self.assertNotIn("ORIGINAL_NESTED_POLICY_927", self.server.requests[-1]["instructions"])
+        self.assertIn("UPDATED_NESTED_POLICY_428", policy_text(self.server.requests[-1]))
+        self.assertNotIn("ORIGINAL_NESTED_POLICY_927", policy_text(self.server.requests[-1]))
         policy.unlink()
         self.run_batch("RESUME WITHOUT DELETED RULES", "--resume")
-        self.assertNotIn("UPDATED_NESTED_POLICY_428", self.server.requests[-1]["instructions"])
+        self.assertNotIn("UPDATED_NESTED_POLICY_428", policy_text(self.server.requests[-1]))
         self.assertEqual(self.saved_requests(), self.server.requests)
 
     def test_full_nested_rules_survive_compaction_outside_the_summary(self):
@@ -1216,7 +1234,7 @@ class Checks(unittest.TestCase):
             p.wait("Context compacted:")
             p.send("AFTER POLICY COMPACTION")
             p.wait("OK AFTER POLICY COMPACTION")
-            self.assertIn(content, self.server.requests[-1]["instructions"])
+            self.assertIn(content, policy_text(self.server.requests[-1]))
             self.assertNotIn("POLICY_END_817", (self.session() / "summary.txt").read_text())
             self.assertEqual(self.saved_requests(), self.server.requests)
         finally:
@@ -1227,8 +1245,8 @@ class Checks(unittest.TestCase):
         (self.project / "AGENTS.md").write_text("ORIGINAL_POLICY")
         self.run_batch("UPDATE INSTRUCTIONS")
         self.assertEqual(len(self.server.requests), 2)
-        self.assertIn("ORIGINAL_POLICY", self.server.requests[0]["instructions"])
-        self.assertIn("TOOL_UPDATED_POLICY", self.server.requests[1]["instructions"])
+        self.assertIn("ORIGINAL_POLICY", policy_text(self.server.requests[0]))
+        self.assertIn("TOOL_UPDATED_POLICY", policy_text(self.server.requests[1]))
 
     def test_unreadable_project_instructions_can_be_corrected_in_the_open_session(self):
         self.server.mode = "echo"
@@ -1250,7 +1268,7 @@ class Checks(unittest.TestCase):
             path.write_text("RECOVERED_POLICY")
             p.send("AFTER BAD POLICY")
             p.wait("OK AFTER BAD POLICY")
-            self.assertIn("RECOVERED_POLICY", self.server.requests[-1]["instructions"])
+            self.assertIn("RECOVERED_POLICY", policy_text(self.server.requests[-1]))
         finally:
             p.finish()
 
@@ -1596,7 +1614,7 @@ class Checks(unittest.TestCase):
             p.wait("OK CONTINUE")
         finally:
             p.finish()
-        self.assertTrue(any(r["instructions"].startswith("Summarize") for r in self.server.requests))
+        self.assertTrue(any(is_compaction(r) for r in self.server.requests))
         self.assertTrue(all(r["reasoning"] == dict(effort="max") for r in self.server.requests))
         self.assertEqual(self.saved_requests(), self.server.requests)
 
@@ -2043,7 +2061,7 @@ class Checks(unittest.TestCase):
         self.run_batch("KEEP ORIGINAL USER GOAL")
         self.assertTrue(any(r["type"] == "compact" for r in self.records()))
         request = self.server.requests[-1]
-        self.assertIn("Preserve sentinel.txt", request["instructions"])
+        self.assertIn("Preserve sentinel.txt", policy_text(request))
         self.assertTrue(any(x.get("content") == "KEEP ORIGINAL USER GOAL" for x in request["input"]))
         calls = [x["call_id"] for x in request["input"] if x.get("type") == "function_call"]
         outputs = [x["call_id"] for x in request["input"] if x.get("type") == "function_call_output"]

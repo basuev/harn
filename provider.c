@@ -1,6 +1,8 @@
 #include "harn.h"
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 void provider_init(void)
@@ -47,9 +49,14 @@ void responses_event(Net *n)
             n->message_phase = phase && !strcmp(phase, "commentary") ? -1
                                    : phase && !strcmp(phase, "final_answer") ? 1 : 0;
         }
+        if (kind && !strcmp(kind, "function_call") && n->first_tool_ms < 0)
+            n->first_tool_ms = now_ms() - n->started_at;
     }
     if (type && !strcmp(type, "response.output_item.done")) {
         json_t *item = json_object_get(event, "item");
+        const char *kind = jstr(item, "type");
+        if (kind && !strcmp(kind, "function_call") && n->first_tool_ms < 0)
+            n->first_tool_ms = now_ms() - n->started_at;
         long index = jint(event, "output_index", (long)json_array_size(n->output));
         if (!json_is_object(item) || index < 0) {
             n->malformed = 1;
@@ -62,6 +69,8 @@ void responses_event(Net *n)
     if (type && !strcmp(type, "response.output_text.delta")) {
         const char *delta = jstr(event, "delta");
         if (delta) {
+            if (*delta && n->first_text_ms < 0)
+                n->first_text_ms = now_ms() - n->started_at;
             buf_puts(&n->text, delta);
             if (!app.compacting && *delta) {
                 if (!n->message_started) {
@@ -72,6 +81,8 @@ void responses_event(Net *n)
             }
         }
     }
+    if (type && !strcmp(type, "response.function_call_arguments.delta") && n->first_tool_ms < 0)
+        n->first_tool_ms = now_ms() - n->started_at;
     if (type && (!strcmp(type, "response.completed") || !strcmp(type, "response.failed") ||
                  !strcmp(type, "response.incomplete"))) {
         json_decref(n->response);
@@ -123,9 +134,27 @@ static size_t received(char *data, size_t size, size_t count, void *opaque)
     }
     return len;
 }
+static size_t received_header(char *data, size_t size, size_t count, void *opaque)
+{
+    Net *n = opaque;
+    size_t len = size * count;
+    const char *name = "x-request-id:";
+    size_t start = strlen(name), end = len;
+    if (len >= start && !strncasecmp(data, name, start)) {
+        while (start < end && isspace((unsigned char)data[start]))
+            start++;
+        while (end > start && isspace((unsigned char)data[end - 1]))
+            end--;
+        free(n->request_id);
+        n->request_id = utf8_text(data + start, end - start);
+    }
+    return len;
+}
 static void net_run(Net *n, const char *url, const char *body, const char *content_type,
                     struct curl_slist *headers)
 {
+    n->started_at = now_ms();
+    n->first_text_ms = n->first_tool_ms = -1;
     n->headers = headers;
     if (n->stream)
         n->output = json_array();
@@ -139,6 +168,8 @@ static void net_run(Net *n, const char *url, const char *body, const char *conte
     curl_easy_setopt(n->easy, CURLOPT_URL, url);
     curl_easy_setopt(n->easy, CURLOPT_WRITEFUNCTION, received);
     curl_easy_setopt(n->easy, CURLOPT_WRITEDATA, n);
+    curl_easy_setopt(n->easy, CURLOPT_HEADERFUNCTION, received_header);
+    curl_easy_setopt(n->easy, CURLOPT_HEADERDATA, n);
     curl_easy_setopt(n->easy, CURLOPT_ERRORBUFFER, n->error);
     curl_easy_setopt(n->easy, CURLOPT_CONNECTTIMEOUT_MS, 20000L);
     /* Streaming inference may legitimately take longer than five minutes.
@@ -167,6 +198,7 @@ static void net_run(Net *n, const char *url, const char *body, const char *conte
         pump(1000);
     if (app.cancel || app.quit)
         n->result = CURLE_ABORTED_BY_CALLBACK;
+    n->duration_ms = now_ms() - n->started_at;
     curl_easy_getinfo(n->easy, CURLINFO_RESPONSE_CODE, &n->status);
     curl_multi_remove_handle(app.multi, n->easy);
     curl_easy_cleanup(n->easy);
@@ -193,6 +225,7 @@ static void net_free(Net *n)
     buf_clear(&n->text);
     json_decref(n->response);
     json_decref(n->output);
+    free(n->request_id);
 }
 json_t *http_json_headers(const char *url, const char *body, const char *content_type,
                           struct curl_slist *headers, long *status)
@@ -289,11 +322,15 @@ json_t *model_request(json_t *payload)
     ui_activity("%s", app.compacting ? "compact" : "model");
     if (!auth_ready(0))
         return NULL;
-    if (strcmp(app.effort, "default"))
-        json_object_set_new(payload, "reasoning", json_pack("{s:s}", "effort", app.effort));
-    request_record(payload);
-    if (app.quit)
+    reasoning_prepare(payload);
+    json_t *wire = app.connection->provider->encode(payload);
+    if (!wire)
         return NULL;
+    request_record(wire);
+    if (app.quit) {
+        json_decref(wire);
+        return NULL;
+    }
     if (app.pending_delivery && !app.compacting) {
         message("Queued messages included in request #%zu: %d", json_array_size(app.requests),
                 app.pending_delivery);
@@ -304,9 +341,7 @@ json_t *model_request(json_t *payload)
         json_decref(delivery);
         app.pending_delivery = 0;
     }
-    json_t *wire = app.connection->provider->encode(payload);
-    if (!wire)
-        return NULL;
+    cache_request(wire);
     char *body = json_dumps(wire, JSON_COMPACT);
     json_decref(wire);
     char *url = fmt("%s%s", app.api_base, app.connection->provider->request_path);
@@ -315,6 +350,7 @@ json_t *model_request(json_t *payload)
         ui_activity("%s", app.compacting ? "compact" : "model");
         Net n = {.stream = 1};
         net_run(&n, url, body, "application/json", app.connection->provider->headers());
+        cache_attempt(&n, attempt);
         if (n.text.len && !app.compacting) {
             if (!app.tty)
                 ui_write("\n", 1);
@@ -359,6 +395,8 @@ json_t *model_request(json_t *payload)
                 n.malformed ? " (invalid stream)" : "");
         json_t *event = json_pack("{s:i,s:i,s:s}", "attempt", attempt, "http_status", (int)n.status,
                                   "code", code ? code : "transport_or_stream");
+        json_object_set_new(event, "request",
+                            json_integer((json_int_t)json_array_size(app.requests)));
         json_object_set_new(event, "curl_code", json_integer(n.result));
         json_object_set_new(event, "message", json_string(diagnostic));
         free(diagnostic);

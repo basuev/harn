@@ -67,6 +67,8 @@ struct Net {
     CURLcode result;
     long status;
     int done, stream, malformed, message_started, message_phase;
+    long long started_at, first_text_ms, first_tool_ms, duration_ms;
+    char *request_id;
     char error[CURL_ERROR_SIZE];
 };
 typedef struct {
@@ -81,6 +83,7 @@ typedef struct {
     json_t *last_usage, *models, *model_info;
     json_t *skills, *active_skills;
     json_t *instruction_dirs, *instruction_sources, *delivered_instructions;
+    json_t *policy_snapshot, *cache_previous, *cache_last, *cache_totals, *reasoning_state;
     FILE *journal;
     size_t cut;
     char *summary;
@@ -171,6 +174,7 @@ json_t *tool_schema(void);
 json_t *tool_run(const char *, json_t *);
 
 int instructions_load(void);
+void instructions_preserve(void);
 json_t *instructions_require(const char *, int);
 
 void skills_refresh(Buf *);
@@ -195,6 +199,13 @@ int api_key_legacy(json_t *, const Connection *);
 json_t *catalog_models(json_t *);
 json_t *catalog_data(json_t *);
 json_t *responses_encode(json_t *);
+json_t *responses_cached_encode(json_t *);
+int model_supports(const char *);
+void reasoning_prepare(json_t *);
+void cache_request(json_t *);
+void cache_attempt(Net *, int);
+void cache_restore(const char *, json_t *);
+void cache_show(void);
 void responses_event(Net *);
 void provider_version(void);
 int models_list(int);

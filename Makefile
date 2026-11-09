@@ -16,7 +16,7 @@ CFLAGS ?= -O2
 CFLAGS += -std=c11 -Wall -Wextra
 CPPFLAGS += -ffile-prefix-map="$(CURDIR)=." -D_XOPEN_SOURCE=700 $(shell pkg-config --cflags libcurl jansson yaml-0.1 md4c)
 LDLIBS += $(shell pkg-config --libs libcurl jansson yaml-0.1 md4c)
-SOURCES = main.c util.c session.c jobs.c tools.c instructions.c skills.c connections.c provider.c auth.c ui.c render.c vendor/linenoise/linenoise.c $(wildcard providers/*/*.c) $(EXTRA_SOURCES)
+SOURCES = main.c util.c session.c jobs.c tools.c instructions.c skills.c connections.c provider.c cache.c auth.c ui.c render.c vendor/linenoise/linenoise.c $(wildcard providers/*/*.c) $(EXTRA_SOURCES)
 OBJECTS = $(SOURCES:%.c=$(BUILD)/%.o)
 
 all: $(BIN)
@@ -39,6 +39,7 @@ fixture:
 check-core: fixture
 	python3 tests/check.py
 	python3 tests/responses.py
+	python3 tests/cache.py
 	python3 tests/ui.py
 	python3 tests/render.py
 	python3 tests/job_control.py

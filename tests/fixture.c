@@ -13,6 +13,6 @@ const Provider fixture_provider = {
     .id = "fixture", .revision = "1", .auth_label = "fixture key",
     .request_path = "/responses", .ready = api_key_ready, .logout = api_key_logout,
     .models = responses_models, .catalog = fixture_catalog, .headers = bearer_headers,
-    .encode = responses_encode, .event = responses_event,
+    .encode = responses_cached_encode, .event = responses_event,
     .legacy = fixture_legacy,
 };

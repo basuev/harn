@@ -154,6 +154,11 @@ packages.
 
 ## History and context
 
+Prompt-cache reuse is optimized at the adapter boundary and measured per HTTP
+attempt. Live instruction changes append authoritative snapshots instead of
+rewriting the prefix. See [prompt caching](docs/prompt-caching.md) for policy
+precedence, capability boundaries, subscription findings and accounting.
+
 Ctrl-C prioritizes discarding a nonempty input draft over cancelling active
 work. Only an empty input allows Ctrl-C to interrupt the turn. This priority
 also applies to SIGINT received through the signal pipe.

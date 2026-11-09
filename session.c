@@ -312,6 +312,12 @@ void usage_record(json_t *response)
     json_t *reasoning = json_object_get(response, "reasoning");
     if (reasoning)
         json_object_set(data, "response_reasoning", reasoning);
+    json_object_set_new(data, "cache_accounted", json_true());
+    const char *metadata[] = {"response_id", "response_model", "upstream_provider", "service_tier",
+                              "request_id", "prompt_cache_diagnostics", "timing"};
+    for (size_t i = 0; i < sizeof(metadata) / sizeof(*metadata); i++)
+        if (json_object_get(app.cache_last, metadata[i]))
+            json_object_set(data, metadata[i], json_object_get(app.cache_last, metadata[i]));
     journal(app.compacting ? "compaction_usage" : "usage", data);
     if (!app.compacting)
         usage_restore(data);
@@ -481,8 +487,23 @@ int session_open(const char *resume)
             json_object_set_new(app.instruction_dirs, json_string_value(data), json_true());
         else if (type && !strcmp(type, "skill"))
             skills_restore(data);
-        else if (type && !strcmp(type, "usage"))
+        else if (type && !strcmp(type, "instructions")) {
+            json_decref(app.instruction_sources);
+            app.instruction_sources = json_incref(data);
+        } else if (type && !strcmp(type, "system_instructions") && json_is_string(data)) {
+            free(app.instructions);
+            app.instructions = xstrdup(json_string_value(data));
+        } else if (type && !strcmp(type, "policy")) {
+            json_decref(app.policy_snapshot);
+            app.policy_snapshot = json_deep_copy(data);
+        } else if (type && (!strcmp(type, "cache_request") || !strcmp(type, "request_attempt") ||
+                            !strcmp(type, "reasoning_context")))
+            cache_restore(type, data);
+        else if (type && !strcmp(type, "usage")) {
             usage_restore(data);
+            cache_restore(type, data);
+        } else if (type && !strcmp(type, "compaction_usage"))
+            cache_restore(type, data);
         else if (type && !strcmp(type, "compact")) {
             app.usage_valid = 0;
             app.cut = (size_t)jint(data, "cut", 0);
@@ -625,12 +646,24 @@ void session_recover(void)
 static void history_append(json_t *input, size_t index)
 {
     json_t *item = json_array_get(app.items, index);
+    if (jstr(item, "type") && !strcmp(jstr(item, "type"), "configuration_update")) {
+        if (index < app.connection_start || !model_supports("supports_reasoning_effort_updates") ||
+            index < (size_t)jint(app.reasoning_state, "start", 0))
+            return;
+        size_t n = json_array_size(input);
+        const char *role = n ? jstr(json_array_get(input, n - 1), "role") : NULL;
+        if (role && !strcmp(role, "user"))
+            json_array_insert(input, n - 1, item);
+        else
+            json_array_append(input, item);
+        return;
+    }
     if (index >= app.connection_start) {
         json_array_append(input, item);
         return;
     }
     const char *type = jstr(item, "type"), *role = jstr(item, "role");
-    if (type && !strcmp(type, "reasoning"))
+    if (type && (!strcmp(type, "reasoning") || !strcmp(type, "configuration_update")))
         return;
     if (type && (!strcmp(type, "function_call") || !strcmp(type, "function_call_output"))) {
         json_t *portable = json_object();
@@ -713,7 +746,8 @@ void context_budget(json_t *model, const char *source)
     json_t *catalog = json_is_object(model) ? json_object() : json_null();
     const char *fields[] = {"context_window", "effective_context_window_percent",
                             "auto_compact_token_limit", "supported_reasoning_levels",
-                            "default_reasoning_level"};
+                            "default_reasoning_level", "supports_reasoning_effort_updates",
+                            "prompt_cache"};
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
         json_t *value = json_object_get(model, fields[i]);
         if (value)
@@ -760,6 +794,7 @@ void context_show(void)
     else
         ui_print("Context: unmeasured (%ld%s budget, compact %ld)", app.context_limit, status,
                  app.compact_limit);
+    cache_show();
     ui_print("Session: %s", app.session_dir);
 }
 void request_record(json_t *request)
@@ -767,16 +802,17 @@ void request_record(json_t *request)
     json_t *template = json_deep_copy(request);
     json_object_del(template, "input");
     json_t *selection = json_array();
-    size_t i;
+    size_t i, next = 0;
     json_t *item;
     json_array_foreach(json_object_get(request, "input"), i, item)
     {
-        size_t k = 0;
-        while (k < json_array_size(app.items) && json_array_get(app.items, k) != item)
+        size_t k = next;
+        while (k < json_array_size(app.items) && !json_equal(json_array_get(app.items, k), item))
             k++;
-        if (k < json_array_size(app.items))
+        if (k < json_array_size(app.items)) {
             json_array_append_new(selection, json_integer((json_int_t)k));
-        else
+            next = k + 1;
+        } else
             json_array_append(selection, item);
     }
     json_t *r = json_pack("{s:s,s:o,s:o}", "provider", app.connection->name,
@@ -822,6 +858,11 @@ static void session_exchange(App *other)
     EXCHANGE(delivered_instructions);
     EXCHANGE(instructions);
     EXCHANGE(last_usage);
+    EXCHANGE(policy_snapshot);
+    EXCHANGE(cache_previous);
+    EXCHANGE(cache_last);
+    EXCHANGE(cache_totals);
+    EXCHANGE(reasoning_state);
     EXCHANGE(summary);
     EXCHANGE(cut);
     EXCHANGE(connection_start);
@@ -861,6 +902,11 @@ static void session_dispose(void)
     json_decref(app.instruction_sources);
     json_decref(app.delivered_instructions);
     json_decref(app.last_usage);
+    json_decref(app.policy_snapshot);
+    json_decref(app.cache_previous);
+    json_decref(app.cache_last);
+    json_decref(app.cache_totals);
+    json_decref(app.reasoning_state);
 }
 int session_switch(const char *id)
 {

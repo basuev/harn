@@ -36,7 +36,12 @@ Only `response.status == "completed"` with a valid stream is accepted as success
 JSON inputs are borrowed, returned JSON values are owned by the caller. The
 transport takes ownership of the list returned by `headers`. Common helpers
 include `api_key_ready`, `api_key_logout`, `bearer_headers`, `responses_models`,
-`catalog_data`, `catalog_models`, `responses_encode` and `responses_event`.
+`catalog_data`, `catalog_models`, `responses_encode`, `responses_cached_encode`
+and `responses_event`. Cache-capable adapters advertise confirmed per-model
+metadata as described in [prompt caching](prompt-caching.md). Authorization
+mode can narrow capabilities even when the model catalog advertises a feature.
+The core records the encoded wire request and each HTTP attempt. Adapters must
+not place credentials in the request body or replace this accounting.
 
 Optional operations are `logout`, `refresh`, `classify`, `legacy`, `pollfds`,
 `tick` and `close`. Error classification returns -1 for terminal, 0 for common

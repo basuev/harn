@@ -73,6 +73,29 @@ class Presentation(unittest.TestCase):
         plain = plain.replace(b"\r", b"").replace(b"\n", b"")
         self.assertIn(str(self.case.project).encode() + b"fixture/fixture-model medium " + status, plain)
 
+    def cache_context(self, width):
+        self.case.server.mode = "echo"
+        self.case.server.usage = dict(input_tokens=1000, output_tokens=10,
+                                     input_tokens_details=dict(cached_tokens=800))
+        self.start(width=width)
+        self.send("MEASURE\r")
+        self.wait_answer("OK MEASURE")
+        self.output = b""
+        self.send("/context\r")
+        self.read_until(lambda: b"attempts measured" in self.output)
+        plain = re.sub(rb"\x1b\[[0-9;]*[A-Za-z]", b"", self.output)
+        self.assertIn(b"Cache last request: 80.0%", plain)
+        self.assertIn(b"800/1000", plain)
+        self.assertIn(b"Cache writes: unknown", plain)
+        self.assertIn(b"1/1 attempts measured", plain)
+        self.assertNotIn(b"\xef\xbf\xbd", plain)
+
+    def test_cache_context_at_narrow_width(self):
+        self.cache_context(42)
+
+    def test_cache_context_at_wide_width(self):
+        self.cache_context(110)
+
     def test_resume_uses_request_text_at_narrow_width_and_filters_by_content(self):
         base = self.case.path / "state/harn/sessions"
         for name, request in (("alpha-id", "Fix the timeout " + "Привет " * 30),

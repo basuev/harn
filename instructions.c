@@ -127,13 +127,25 @@ int instructions_load(void)
     buf_puts(&instructions, SYSTEM_PROMPT);
     buf_puts(
         &instructions,
-        "\n\nThe AGENTS.md sources below are current. Historical AGENTS.md reads do not "
-        "override this list. Files combine by directory scope. Global rules apply everywhere. "
+        "\n\nThe latest Current harn policy snapshot in the conversation replaces all earlier "
+        "snapshots, including removed sources and skills. Historical AGENTS.md reads do not "
+        "override that snapshot. Files combine by directory scope. Global rules apply everywhere. "
         "Closer directories override conflicting ancestor rules while other rules remain. "
-        "Explicit user requests take precedence. Sources listed here are already loaded and do "
+        "Explicit user requests take precedence. Sources listed in the snapshot are loaded and do "
         "not need another read. Before exec affects a new directory, inspect "
         "its AGENTS.md chain with read. If write/edit reports changed instructions, reconsider "
         "the change using the updated rules before retrying.\n");
+    if (!app.instructions || strcmp(app.instructions, instructions.data)) {
+        if (app.instructions)
+            app.usage_valid = 0;
+        free(app.instructions);
+        app.instructions = xstrdup(instructions.data);
+        json_t *event = json_string(app.instructions);
+        journal("system_instructions", event);
+        json_decref(event);
+    }
+    buf_clear(&instructions);
+    buf_puts(&instructions, "Current harn policy snapshot:\n");
     const char *scope;
     json_t *entry;
     json_object_foreach(sources, scope, entry)
@@ -148,17 +160,36 @@ int instructions_load(void)
         buf_puts(&instructions, "\n");
     }
     skills_refresh(&instructions);
+    int changed = !json_equal(sources, json_object_get(app.policy_snapshot, "sources")) ||
+                  !json_equal(app.skills, json_object_get(app.policy_snapshot, "skills"));
     json_decref(app.instruction_sources);
     app.instruction_sources = sources;
-    if (!app.instructions || strcmp(app.instructions, instructions.data)) {
-        if (app.instructions)
-            app.usage_valid = 0;
-        free(app.instructions);
-        app.instructions = instructions.data;
-        ui_status();
-    } else
-        buf_clear(&instructions);
+    if (changed) {
+        size_t index = json_array_size(app.items);
+        item_add(json_pack("{s:s,s:s}", "role", "developer", "content", instructions.data));
+        json_decref(app.policy_snapshot);
+        app.policy_snapshot = json_pack("{s:O,s:O,s:I}", "sources", sources, "skills", app.skills,
+                                        "item", (json_int_t)index);
+        journal("policy", app.policy_snapshot);
+        app.usage_valid = 0;
+    }
+    buf_clear(&instructions);
+    instructions_preserve();
+    ui_status();
     return 1;
+}
+void instructions_preserve(void)
+{
+    long index = jint(app.policy_snapshot, "item", -1);
+    if (index < 0 || (size_t)index >= app.cut)
+        return;
+    json_t *item = json_array_get(app.items, (size_t)index);
+    if (!item)
+        return;
+    size_t next = json_array_size(app.items);
+    item_add(json_incref(item));
+    json_object_set_new(app.policy_snapshot, "item", json_integer((json_int_t)next));
+    journal("policy", app.policy_snapshot);
 }
 static int contains(const char *dir, const char *scope)
 {

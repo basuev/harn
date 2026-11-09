@@ -1,0 +1,219 @@
+{
+  "measured_on": "2026-11-09",
+  "authentication": "ChatGPT subscription OAuth",
+  "model": "gpt-6.1-sol",
+  "baseline_revision": "88c501a",
+  "binary_sha256": {
+    "before": "52b662eb1b511ce0110be4e37a422488b8403f4723621341b02a1dd15f8caa9e",
+    "after": "a5bf36a24a5d7669eecaec09cb211b2608710a9dede68c53c5a85e4f6663dc37"
+  },
+  "historical_baseline": {
+    "period": "2026-11-05 through 2026-11-09",
+    "chatgpt": {
+      "requests": 1320,
+      "input_tokens": 191065074,
+      "cached_tokens": 94585088,
+      "cache_read_percent": 49.5
+    },
+    "allmodels": {
+      "requests": 714,
+      "cache_read_percent": 98.69
+    },
+    "refuseless": {
+      "requests": 84,
+      "cache_read_percent": 94.94
+    }
+  },
+  "paired_workflow": {
+    "before": {
+      "requests": 18,
+      "input_tokens": 499502,
+      "cached_tokens": 22400,
+      "cache_read_percent": 4.48,
+      "unreused_input_tokens": 477102,
+      "turns": 12,
+      "correct_replies": 12,
+      "total_wall_ms": 74192,
+      "followup_wall_median_ms": 4341.0
+    },
+    "after": {
+      "requests": 18,
+      "input_tokens": 503620,
+      "cached_tokens": 20992,
+      "cache_read_percent": 4.17,
+      "unreused_input_tokens": 482628,
+      "turns": 12,
+      "correct_replies": 12,
+      "total_wall_ms": 76724,
+      "followup_wall_median_ms": 4552.5
+    }
+  },
+  "routing_comparison": {
+    "summary": {
+      "without_key": {
+        "requests": 4,
+        "input_tokens": 167540,
+        "cached_tokens": 0,
+        "cache_read_percent": 0.0,
+        "first_text_median_ms": 2973.0
+      },
+      "with_key": {
+        "requests": 4,
+        "input_tokens": 167540,
+        "cached_tokens": 97920,
+        "cache_read_percent": 58.45,
+        "first_text_median_ms": 3568.5
+      },
+      "warm_keyed_last_two_percent": 99.63
+    },
+    "requests": [
+      {
+        "keyed": false,
+        "i": 0,
+        "first_text_ms": 3011,
+        "input": 41885,
+        "cached": 0,
+        "writes": 0,
+        "duration_ms": 3143
+      },
+      {
+        "keyed": true,
+        "i": 1,
+        "first_text_ms": 3878,
+        "input": 41885,
+        "cached": 0,
+        "writes": 0,
+        "duration_ms": 4079
+      },
+      {
+        "keyed": false,
+        "i": 2,
+        "first_text_ms": 2935,
+        "input": 41885,
+        "cached": 0,
+        "writes": 0,
+        "duration_ms": 3162
+      },
+      {
+        "keyed": true,
+        "i": 3,
+        "first_text_ms": 3509,
+        "input": 41885,
+        "cached": 14464,
+        "writes": 0,
+        "duration_ms": 3693
+      },
+      {
+        "keyed": false,
+        "i": 4,
+        "first_text_ms": 2664,
+        "input": 41885,
+        "cached": 0,
+        "writes": 0,
+        "duration_ms": 2876
+      },
+      {
+        "keyed": true,
+        "i": 5,
+        "first_text_ms": 2738,
+        "input": 41885,
+        "cached": 41728,
+        "writes": 0,
+        "duration_ms": 2840
+      },
+      {
+        "keyed": false,
+        "i": 6,
+        "first_text_ms": 4582,
+        "input": 41885,
+        "cached": 0,
+        "writes": 0,
+        "duration_ms": 4722
+      },
+      {
+        "keyed": true,
+        "i": 7,
+        "first_text_ms": 3628,
+        "input": 41885,
+        "cached": 41728,
+        "writes": 0,
+        "duration_ms": 3788
+      }
+    ]
+  },
+  "compaction": [
+    {
+      "phase": "paired-before",
+      "wall_ms": 8546,
+      "input_tokens": 39716,
+      "cached_tokens": 0,
+      "timing": null,
+      "continued": true
+    },
+    {
+      "phase": "paired-after",
+      "wall_ms": 9811,
+      "input_tokens": 42050,
+      "cached_tokens": 34176,
+      "timing": {
+        "duration_ms": 8450,
+        "first_text_ms": 3352,
+        "first_tool_ms": null
+      },
+      "continued": true
+    }
+  ],
+  "exploratory_runs": {
+    "before": {
+      "requests": 8,
+      "input_tokens": 50482,
+      "cached_tokens": 1280,
+      "cache_read_percent": 2.54,
+      "unreused_input_tokens": 49202,
+      "turns": 7,
+      "correct_replies": 7,
+      "total_wall_ms": 31944,
+      "followup_wall_median_ms": 4070.0
+    },
+    "after": {
+      "requests": 8,
+      "input_tokens": 54382,
+      "cached_tokens": 0,
+      "cache_read_percent": 0.0,
+      "unreused_input_tokens": 54382,
+      "turns": 7,
+      "correct_replies": 7,
+      "total_wall_ms": 32266,
+      "followup_wall_median_ms": 4190.5
+    },
+    "before-long": {
+      "requests": 8,
+      "input_tokens": 287086,
+      "cached_tokens": 40704,
+      "cache_read_percent": 14.18,
+      "unreused_input_tokens": 246382,
+      "turns": 7,
+      "correct_replies": 7,
+      "total_wall_ms": 38057,
+      "followup_wall_median_ms": 4323.5
+    },
+    "after-long": {
+      "requests": 13,
+      "input_tokens": 396667,
+      "cached_tokens": 1408,
+      "cache_read_percent": 0.35,
+      "unreused_input_tokens": 395259,
+      "turns": 7,
+      "correct_replies": 7,
+      "total_wall_ms": 57041,
+      "followup_wall_median_ms": 4804.0
+    }
+  },
+  "limitations": [
+    "One paired full-workflow run per build, not a statistical estimate of daily performance.",
+    "Cache results are reported counters, not measured subscription quota savings.",
+    "The API-key adapter is fixture-verified, not live-verified.",
+    "Older binary does not measure per-attempt first-text latency.",
+    "Exploratory long runs differed in tool batching and are not matched workloads."
+  ]
+}
