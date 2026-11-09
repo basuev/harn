@@ -36,9 +36,35 @@ int main(void) {
     json_t *input = json_loadf(stdin, 0, &error);
     if (!input) return 1;
     const char *text = jstr(input, "text");
-    json_t *rows = render_text(text, json_string_length(json_object_get(input, "text")),
-                              jint(input, "width", 42), jint(input, "mode", 2),
-                              jint(input, "indent", 0));
+    json_t *rows;
+    MarkdownStream stream = {0};
+    json_t *chunks = json_object_get(input, "chunks");
+    int width = jint(input, "width", 42), visible = jint(input, "visible", 24);
+    if (chunks) {
+        rows = json_array();
+        Buf source = {0};
+        size_t i, from = 0;
+        json_t *chunk;
+        json_array_foreach(chunks, i, chunk) {
+            if ((long)i == jint(input, "resize", -1)) {
+                render_freeze(&stream);
+                from = source.len;
+                width = jint(input, "new_width", 90);
+            }
+            buf_puts(&source, json_string_value(chunk));
+            json_t *room = json_array_get(json_object_get(input, "windows"), i);
+            json_array_append_new(rows, render_stream(&stream, source.data, source.len,
+                                                      from, width, room ? json_integer_value(room) : visible,
+                                                      i + 1 == json_array_size(chunks)));
+        }
+        buf_clear(&source);
+    } else if (jint(input, "mode", 2) == 1)
+        rows = render_stream(&stream, text, json_string_length(json_object_get(input, "text")),
+                             0, width, visible, 0);
+    else
+        rows = render_text(text, json_string_length(json_object_get(input, "text")),
+                           width, jint(input, "mode", 2), jint(input, "indent", 0));
+    json_decref(stream.literal);
     json_dumpf(rows, stdout, JSON_ENSURE_ASCII);
     json_decref(rows);
     json_decref(input);
@@ -101,14 +127,99 @@ int main(void) {
         rows = self.render("- " + "界面 e\u0301 " * 30)
         self.assertTrue(all(width(row) <= 42 for row in rows))
 
-    def test_pending_inline_spans_do_not_rewrite_scrollback(self):
-        prefix = "Start. "
-        pending = "**" + ("long highlighted text " * 80).rstrip()
-        self.assertEqual(list(map(plain, self.render(prefix + pending, mode=1))), ["Start."])
-        rows = self.render(prefix + pending + "**", mode=1)
-        self.assertGreater(len(rows), 30)
-        self.assertEqual(" ".join(map(plain, rows)).split(), (prefix + pending[2:]).split())
-        self.assertIn("**unclosed", "\n".join(map(plain, self.render("**unclosed"))))
+    def stream(self, chunks, columns=42, visible=24, **options):
+        result = subprocess.run([self.binary], input=json.dumps(dict(chunks=chunks,
+            width=columns, visible=visible, **options)), text=True, capture_output=True, check=True)
+        return json.loads(result.stdout)
+
+    def test_pending_inline_text_is_visible_before_its_closer(self):
+        for opener, content, closer in (("**", "Привет", "**"), ("`", "a_b", "`"),
+                                         ("[", "Manual", "](https://example.com)")):
+            with self.subTest(opener=opener):
+                frames = self.stream(["Start. " + opener + content, closer])
+                self.assertIn(opener + content, "\n".join(map(plain, frames[0])))
+                final = "\n".join(frames[1])
+                self.assertNotIn(opener + content, plain(final))
+                self.assertIn(content, plain(final))
+        self.assertIn("**unclosed", "\n".join(map(plain, self.render("**unclosed", mode=1))))
+
+    def test_long_inline_preview_keeps_scrollback_literal_but_next_markdown_works(self):
+        for opener, closer in (("**", "**"), ("`", "`"),
+                               ("[", "](https://example.com/path_(part))")):
+            with self.subTest(opener=opener):
+                pending = "Start. " + opener + ("Привет 界 e\u0301 " * 80).rstrip()
+                frames = self.stream([pending, closer + "\n\n**Next** with `code`."], visible=8)
+                self.assertGreater(len(frames[0]), 8)
+                self.assertEqual(frames[0][:-1], frames[1][:len(frames[0]) - 1])
+                output = "\n".join(frames[1])
+                self.assertIn(opener, plain(output))
+                self.assertIn("\x1b[1mNext", output)
+                self.assertIn("\x1b[7mcode", output)
+                self.assertTrue(all(width(row) <= 42 for row in frames[1]))
+
+    def test_shrinking_available_rows_freezes_an_already_visible_preview(self):
+        pending = "**" + ("word " * 30).rstrip()
+        frames = self.stream([pending, "**\n\n**After**"], windows=[20, 2])
+        self.assertEqual(frames[0][:-1], frames[1][:len(frames[0]) - 1])
+        self.assertIn("**word", "\n".join(map(plain, frames[1])))
+        self.assertIn("\x1b[1mAfter", "\n".join(frames[1]))
+
+    def test_short_preview_after_a_long_prefix_can_still_be_formatted(self):
+        prefix = "Before " * 500 + "\n\n"
+        frames = self.stream([prefix + "**Small", "**"], visible=4)
+        self.assertEqual(frames[0][:-4], frames[1][:len(frames[0]) - 4])
+        self.assertIn("\x1b[1mSmall", "\n".join(frames[1]))
+
+    def test_split_delimiters_and_nested_link_labels(self):
+        for chunks in (["*", "*bold", "*", "*"], ["``a`b", "``"],
+                       ["[a [nested]", " label]", "(https://example.com/a_(b))"],
+                       ["~~strike", "~~"]):
+            with self.subTest(chunks=chunks):
+                frames = self.stream(chunks)
+                self.assertEqual(frames[-1], self.render("".join(chunks)))
+
+    def test_incremental_frames_never_change_rows_released_to_scrollback(self):
+        for columns in (42, 90, 140):
+            for opener, closer in (("**", "**"), ("``", "``"),
+                                   ("[", "](https://example.com/a_(b))")):
+                with self.subTest(columns=columns, opener=opener):
+                    source = "**Heading**\n\n" + opener + ("Привет 界 e\u0301 " * 100).rstrip()
+                    source += closer + "\n\n**After** with `code`."
+                    chunks = [source[i:i + 7] for i in range(0, len(source), 7)]
+                    frames = self.stream(chunks, columns=columns, visible=4)
+                    for old, new in zip(frames, frames[1:]):
+                        committed = old[:-4]
+                        self.assertEqual(committed, new[:len(committed)])
+                    self.assertIn("\x1b[1mAfter", "\n".join(frames[-1]))
+
+    def test_completion_uses_the_parser_for_nested_and_malformed_inline_syntax(self):
+        for source in ("***bold italic***", "**bold *italic***", "*outer **inner** end*",
+                       "[unclosed **bold**", "`unclosed **bold**"):
+            with self.subTest(source=source):
+                frames = self.stream([source[:-1], source[-1:]])
+                self.assertEqual(frames[-1], self.render(source))
+
+    def test_unclosed_inline_does_not_disable_the_next_paragraph(self):
+        for opener in ("**", "`", "[", "[Manual](https://example.com/"):
+            with self.subTest(opener=opener):
+                frames = self.stream([opener + "word " * 100, "\n \n**After**"], visible=4)
+                self.assertEqual(frames[0][:-1], frames[1][:len(frames[0]) - 1])
+                self.assertIn("\x1b[1mAfter", "\n".join(frames[1]))
+
+    def test_frozen_code_waits_for_a_matching_backtick_run(self):
+        frames = self.stream(["``" + "word " * 100, "``` literal ",
+                              "``\n\n**After**"], visible=4)
+        self.assertIn("``` literal", "\n".join(map(plain, frames[1])))
+        self.assertIn("\x1b[1mAfter", "\n".join(frames[2]))
+        self.assertEqual(frames[0][:-1], frames[2][:len(frames[0]) - 1])
+
+    def test_resize_does_not_repeat_an_inline_preview(self):
+        frames = self.stream(["Before **keep this", " text**\n\n**After**"],
+                             resize=1, new_width=90)
+        self.assertIn("Before **keep this", "\n".join(map(plain, frames[0])))
+        self.assertNotIn("keep this", "\n".join(map(plain, frames[1])))
+        self.assertIn("text**", "\n".join(map(plain, frames[1])))
+        self.assertIn("\x1b[1mAfter", "\n".join(frames[1]))
 
     def test_fenced_code_streams_without_inline_parsing(self):
         rows = self.render("```sh\nprintf '**literal'\n", mode=1)

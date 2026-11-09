@@ -47,6 +47,15 @@ a selected top-level command. Selection commands then open their argument picker
 loading model capabilities when needed, regardless of whether a catalog is cached.
 Tab only inserts a suggestion.
 
+Streaming Markdown prioritizes visible progress over perfect retroactive styling.
+An unfinished inline construct appears literally while its opener can still be
+redrawn. Closing it within that area applies Markdown normally. Once its opener
+leaves that area, that construct stays literal through its closing delimiter.
+Later constructs still receive normal formatting. Resizing also commits the
+current preview because the old layout can no longer be safely revisited. This
+presentation-only compromise avoids waiting for an arbitrarily long delimiter
+pair without rewriting scrollback, provider history, or batch output.
+
 One event loop keeps local process controls available during network requests,
 retry delays, and editor handoff. User commands and model tools share ownership
 of the same jobs. Finishing a model turn does not stop a background server.

@@ -730,6 +730,53 @@ class Presentation(unittest.TestCase):
         saved = [r["data"] for r in self.case.records() if r["type"] == "item"]
         self.assertIn(answer, saved)
 
+    def assert_inline_stream_is_live(self, long=False, resize=False):
+        pending = "**" + ("Привет " * 100 if long else "wait ")
+        pending += " " * (-len(pending) % 7)
+        source = pending + "GATE_OK text**\n\n**Done**\nEND"
+        answer = text(source)
+        answer["phase"] = "final_answer"
+        self.case.server.tool_plan = [[answer]]
+        gate, arrived = threading.Event(), threading.Event()
+        def hold(chunk):
+            if chunk == "GATE_OK":
+                arrived.set()
+                gate.wait(15)
+        self.case.server.ui_delta_hook = hold
+        self.start(width=42, height=12)
+        self.send("TASK\r")
+        try:
+            self.assertTrue(arrived.wait(5))
+            self.read_until(lambda: b"GATE_OK" in self.output)
+            self.assertFalse(any(r["type"] == "item" and r["data"] == answer
+                                 for r in self.case.records()))
+            if resize:
+                fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", 12, 90, 0, 0))
+            self.send("keep draft")
+            self.read_until(lambda: b"keep draft" in self.output)
+        finally:
+            gate.set()
+        self.wait_answer("END")
+        self.assertIn(b"\x1b[1mDone", self.output)
+        if not long and not resize:
+            self.assertIn(b"\x1b[1mwait", self.output)
+        moves = [int(value) for value in re.findall(rb"\x1b\[([0-9]+)A", self.output)]
+        self.assertLessEqual(max(moves), 12)
+        self.assertNotRegex(self.output, rb"\x1b\[-[0-9]+A")
+        self.assertTrue(any(r["type"] == "item" and r["data"] == answer
+                            for r in self.case.records()))
+        self.send("\r")
+        self.wait_answer("OK keep draft")
+
+    def test_short_inline_preview_is_live_and_formats_on_close(self):
+        self.assert_inline_stream_is_live()
+
+    def test_long_inline_preview_is_live_and_preserves_the_draft(self):
+        self.assert_inline_stream_is_live(long=True)
+
+    def test_inline_preview_survives_resize_without_losing_the_draft(self):
+        self.assert_inline_stream_is_live(long=True, resize=True)
+
     def test_resize_after_a_long_stream_keeps_the_draft_and_scroll_geometry(self):
         source = "Before " * 500 + "GATE_OK" + " after " * 20 + "\nEND"
         answer = text(source)

@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from check import BINARY, Checks, call, text
 
@@ -529,6 +530,53 @@ def main():
             terminal = None
             case.tearDown()
             case = None
+        for width in (42, 90, 140):
+            for long in (False, True):
+                case = Checks()
+                case.setUp()
+                case.server.mode = "plan"
+                case.server.ui_stream = True
+                pending = "**" + ("Привет " * 800 if long else "wait ")
+                pending += " " * (-len(pending) % 7)
+                source = pending + "GATE_OK text**\n\n**Done**\nEND"
+                answer = text(source)
+                answer["phase"] = "final_answer"
+                case.server.tool_plan = [[answer]]
+                gate, arrived = threading.Event(), threading.Event()
+                def hold(chunk):
+                    if chunk == "GATE_OK":
+                        arrived.set()
+                        gate.wait(20)
+                case.server.ui_delta_hook = hold
+                name = "inline-" + str(width) + ("-long" if long else "-short")
+                terminal = t = Terminal(case, env, artifacts, name,
+                                       "vim -Nu NONE -n -i NONE --noplugin", width=width)
+                t.send("TASK")
+                try:
+                    assert arrived.wait(10)
+                    log = artifacts / (name + ".log")
+                    until(lambda: "GATE_OK" in log.read_text(), "visible inline preview")
+                    assert answer not in t.items()
+                    t.observe("pending-preview")
+                    draft = "Черновик\nKeep draft"
+                    t.paste(draft)
+                    t.observe("preview-with-draft")
+                finally:
+                    gate.set()
+                t.wait_answer("END")
+                t.observe("completed")
+                assert answer in t.items()
+                assert t.users() == ["TASK"]
+                t.key("Return")
+                t.wait_answer("OK Черновик")
+                assert t.users()[-1] == draft
+                t.key("Control", "d")
+                assert t.window.wait(timeout=5) == 0
+                results[name] = True
+                t.close()
+                terminal = None
+                case.tearDown()
+                case = None
         (artifacts / "results.json").write_text(json.dumps(results, indent=2))
         print(json.dumps(dict(results=results, artifacts=str(artifacts)), indent=2))
     finally:

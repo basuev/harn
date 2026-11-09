@@ -222,12 +222,94 @@ static void row_end(json_t *rows, Buf *row, int *current)
     json_array_append_new(rows, json_string(row->data ? row->data : ""));
     buf_clear(row);
 }
-/* A pending inline construct is rendered once its closing delimiter arrives.
- * This keeps earlier scrollback stable even for spans longer than the screen. */
-size_t render_prefix(const char *text, size_t len)
+static int blank_line(const char *text, size_t len, size_t at)
+{
+    if (text[at] != '\n')
+        return 0;
+    size_t end = at + 1;
+    while (end < len && (text[end] == ' ' || text[end] == '\t' || text[end] == '\r'))
+        end++;
+    return end < len && text[end] == '\n';
+}
+/* Zero means that an inline opener is still incomplete. Non-openers advance
+ * by one byte. The Markdown parser remains responsible for actual styling. */
+static size_t inline_end(const char *text, size_t len, size_t start)
+{
+    size_t i = start;
+    if (text[i] == '\\')
+        return i + 1 < len ? i + 2 : 0;
+    if (text[i] == '!' && i + 1 < len && text[i + 1] == '[')
+        i++;
+    if (text[i] == '[') {
+        size_t end = i + 1;
+        int depth = 1;
+        for (; end < len; end++) {
+            if (text[end] == '\\' && end + 1 < len)
+                end++;
+            else if (text[end] == '[')
+                depth++;
+            else if (text[end] == ']' && !--depth)
+                break;
+            else if (blank_line(text, len, end))
+                return end;
+        }
+        if (end == len || end + 1 == len)
+            return 0;
+        if (text[end + 1] != '(')
+            return end + 1;
+        depth = 1;
+        end += 2;
+        for (; end < len && depth; end++) {
+            if (blank_line(text, len, end))
+                return end;
+            if (text[end] == '\\' && end + 1 < len)
+                end++;
+            else if (text[end] == '(')
+                depth++;
+            else if (text[end] == ')')
+                depth--;
+        }
+        return depth ? 0 : end;
+    }
+    if (text[i] == '`' || text[i] == '*' || text[i] == '_' || text[i] == '~') {
+        size_t n = 1;
+        while (i + n < len && text[i + n] == text[i])
+            n++;
+        if (text[i] == '~' && n < 2)
+            return i + n;
+        if (i + n == len)
+            return 0;
+        if (text[i] != '`' &&
+            (isspace((unsigned char)text[i + n]) ||
+             (i && isalnum((unsigned char)text[i - 1]))))
+            return i + n;
+        for (size_t end = i + n; end < len;) {
+            if (blank_line(text, len, end))
+                return end;
+            if (text[end] == '\\' && text[i] != '`' && end + 1 < len) {
+                end += 2;
+                continue;
+            }
+            if (text[end] != text[i]) {
+                end++;
+                continue;
+            }
+            size_t run = 1;
+            while (end + run < len && text[end + run] == text[i])
+                run++;
+            if ((text[i] == '`' && run == n) ||
+                (text[i] != '`' && run >= n && !isspace((unsigned char)text[end - 1])))
+                return end + n;
+            end += run;
+        }
+        return 0;
+    }
+    return start + 1;
+}
+static size_t pending_inline(const char *text, size_t len)
 {
     int fence = 0;
-    for (size_t i = 0; i < len; i++) {
+    for (size_t i = 0; i < len;) {
         if ((!i || text[i - 1] == '\n') && i + 2 < len &&
             (!strncmp(text + i, "```", 3) || !strncmp(text + i, "~~~", 3))) {
             fence = !fence;
@@ -236,53 +318,14 @@ size_t render_prefix(const char *text, size_t len)
         }
         if (i == len)
             break;
-        if (fence)
-            continue;
-        if (text[i] == '\\') {
-            if (++i == len)
-                return i - 1;
+        if (fence) {
+            i++;
             continue;
         }
-        if (text[i] == '[') {
-            size_t end = i + 1;
-            while (end < len && text[end] != ']' && text[end] != '\n')
-                end++;
-            if (end == len || (end + 1 == len && text[end] == ']'))
-                return i && text[i - 1] == '!' ? i - 1 : i;
-            if (text[end] == ']' && text[end + 1] == '(') {
-                int depth = 1;
-                end += 2;
-                for (; end < len && depth; end++) {
-                    if (text[end] == '\\' && end + 1 < len)
-                        end++;
-                    else if (text[end] == '(')
-                        depth++;
-                    else if (text[end] == ')')
-                        depth--;
-                }
-                if (depth)
-                    return i;
-                i = end - 1;
-            }
-        } else if (text[i] == '`' || text[i] == '*' || text[i] == '_') {
-            size_t n = 1;
-            while (i + n < len && text[i + n] == text[i])
-                n++;
-            if (i + n == len)
-                return i;
-            if (text[i] != '`' &&
-                (isspace((unsigned char)text[i + n]) ||
-                 (i && isalnum((unsigned char)text[i - 1])))) {
-                i += n - 1;
-                continue;
-            }
-            size_t end = i + n;
-            while (end + n <= len && memcmp(text + i, text + end, n))
-                end++;
-            if (end + n > len)
-                return i;
-            i = end + n - 1;
-        }
+        size_t end = inline_end(text, len, i);
+        if (!end)
+            return i;
+        i = end;
     }
     return len;
 }
@@ -290,8 +333,6 @@ json_t *render_text(const char *text, size_t len, int width, int markdown, int i
 {
     Render r = {.indent = indent};
     if (markdown > 0) {
-        if (markdown == 1)
-            len = render_prefix(text, len);
         MD_PARSER parser = {.flags = MD_FLAG_NOHTML | MD_FLAG_STRIKETHROUGH | MD_FLAG_TASKLISTS,
                             .enter_block = enter_block, .leave_block = leave_block,
                             .enter_span = enter_span, .leave_span = leave_span,
@@ -363,4 +404,69 @@ json_t *render_text(const char *text, size_t len, int width, int markdown, int i
         row_end(rows, &row, &current);
     free(r.cells);
     return rows;
+}
+
+void render_freeze(MarkdownStream *stream)
+{
+    if (!stream->pending)
+        return;
+    if (!stream->literal)
+        stream->literal = json_array();
+    json_t *last = json_array_get(stream->literal, json_array_size(stream->literal) - 1);
+    if (!last || json_integer_value(json_array_get(last, 1)))
+        json_array_append_new(stream->literal, json_pack("[I,i]",
+                              (json_int_t)(stream->pending - 1), 0));
+}
+static void stream_source(Buf *out, MarkdownStream *stream, const char *text,
+                          size_t from, size_t end, size_t pending)
+{
+    size_t range = 0;
+    for (size_t i = from; i < end; i++) {
+        json_t *span = json_array_get(stream->literal, range);
+        while (span && json_integer_value(json_array_get(span, 1)) &&
+               (size_t)json_integer_value(json_array_get(span, 1)) <= i)
+            span = json_array_get(stream->literal, ++range);
+        int literal = i >= pending || (span &&
+                      i >= (size_t)json_integer_value(json_array_get(span, 0)));
+        if (literal && (unsigned char)text[i] < 128 && ispunct((unsigned char)text[i]))
+            buf_puts(out, "\\");
+        buf_add(out, text + i, 1);
+    }
+}
+json_t *render_stream(MarkdownStream *stream, const char *text, size_t len,
+                       size_t from, int width, int visible, int complete)
+{
+    if (stream->pending && stream->rows > (size_t)visible &&
+        stream->pending_row < stream->rows - (size_t)visible)
+        render_freeze(stream);
+    size_t i;
+    json_t *span;
+    json_array_foreach(stream->literal, i, span) {
+        if (!json_integer_value(json_array_get(span, 1))) {
+            size_t end = inline_end(text, len,
+                                   (size_t)json_integer_value(json_array_get(span, 0)));
+            if (end)
+                json_array_set_new(span, 1, json_integer((json_int_t)end));
+        }
+    }
+    size_t pending = pending_inline(text, len);
+    stream->pending = !complete && pending < len ? pending + 1 : 0;
+    Buf source = {0};
+    stream_source(&source, stream, text, from, len, complete ? len : pending);
+    json_t *frame = render_text(source.data ? source.data : "", source.len, width, 2, 0);
+    buf_clear(&source);
+    stream->rows = json_array_size(frame);
+    stream->pending_row = 0;
+    if (stream->pending && pending >= from) {
+        stream_source(&source, stream, text, from, pending, pending);
+        json_t *prefix = render_text(source.data ? source.data : "", source.len, width, 2, 0);
+        size_t rows = json_array_size(prefix);
+        stream->pending_row = rows ? rows - 1 : 0;
+        json_decref(prefix);
+        buf_clear(&source);
+    }
+    if (stream->pending && stream->rows > (size_t)visible &&
+        stream->pending_row < stream->rows - (size_t)visible)
+        render_freeze(stream);
+    return frame;
 }

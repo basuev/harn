@@ -202,21 +202,25 @@ static void output_reset(void)
     buf_clear(&app.output_line);
     json_decref(app.output_frame);
     app.output_frame = NULL;
+    json_decref(app.output_markdown.literal);
+    memset(&app.output_markdown, 0, sizeof(app.output_markdown));
+    app.output_offset = 0;
     app.output_rows = app.output_skip = app.output_columns = 0;
 }
 static void output_resize(void)
 {
     if (!app.output_columns || app.output_columns == columns())
         return;
-    /* Printed scrollback keeps its original layout. Carry only inline text
-     * that has not appeared yet into the new width. */
-    size_t shown = app.output_kind == OUTPUT_TEXT
-                       ? render_prefix(app.output_line.data, app.output_line.len)
-                       : app.output_line.len;
-    char *pending = xstrdup(app.output_line.data ? app.output_line.data + shown : "");
-    output_reset();
-    buf_puts(&app.output_line, pending);
-    free(pending);
+    /* Already printed text keeps its old layout. Retain source only to find
+     * the end of an inline preview whose opener cannot be redrawn now. */
+    if (app.output_kind == OUTPUT_TEXT) {
+        render_freeze(&app.output_markdown);
+        app.output_offset = app.output_line.len;
+        json_decref(app.output_frame);
+        app.output_frame = NULL;
+        app.output_rows = app.output_skip = app.output_columns = 0;
+    } else
+        output_reset();
 }
 static int visible_rows(void)
 {
@@ -231,10 +235,12 @@ static void output_draw(int complete)
      * current frame's width until its scrollback has been released. */
     int width = app.output_columns ? app.output_columns : columns();
     int kind = app.output_kind;
-    json_t *frame = render_text(app.output_line.data ? app.output_line.data : "",
-                                app.output_line.len, width, kind == OUTPUT_TEXT ? (complete ? 2 : 1)
-                                                                  : kind == OUTPUT_LOG ? -1 : 0,
-                                kind == OUTPUT_TEXT ? 0 : 2);
+    const char *text = app.output_line.data ? app.output_line.data : "";
+    json_t *frame = kind == OUTPUT_TEXT
+                        ? render_stream(&app.output_markdown, text, app.output_line.len,
+                                        app.output_offset, width, visible_rows(), complete)
+                        : render_text(text, app.output_line.len, width,
+                                      kind == OUTPUT_LOG ? -1 : 0, 2);
     size_t count = json_array_size(frame), old = json_array_size(app.output_frame);
     size_t same = (size_t)app.output_skip;
     while (same < old && same < count &&

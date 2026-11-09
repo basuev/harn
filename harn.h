@@ -45,6 +45,10 @@ typedef struct {
     char *data;
     size_t len, cap;
 } Buf;
+typedef struct {
+    json_t *literal;
+    size_t pending, pending_row, rows;
+} MarkdownStream;
 typedef struct Job Job;
 struct Job {
     int id, fd, logfd, background, reaped, status, stopped, announced;
@@ -100,6 +104,8 @@ typedef struct {
     Buf stdin_buf;
     json_t *deferred_output, *output_frame;
     Buf output_line;
+    MarkdownStream output_markdown;
+    size_t output_offset;
     int output_rows, output_skip, output_columns, output_kind, response_commentary, compact_requested;
     pid_t editor_pid;
     char *editor_path, *editor_draft;
@@ -213,7 +219,8 @@ void ui_response_end(void);
 void ui_exec_start(Job *);
 void ui_exec_done(Job *);
 json_t *render_text(const char *, size_t, int, int, int);
-size_t render_prefix(const char *, size_t);
+json_t *render_stream(MarkdownStream *, const char *, size_t, size_t, int, int, int);
+void render_freeze(MarkdownStream *);
 void ui_editor_done(int);
 void ui_command(char *);
 void ui_pending(void);
